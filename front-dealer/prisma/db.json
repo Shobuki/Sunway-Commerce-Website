@@ -1,0 +1,315 @@
+{
+  "ProductCategory": [
+    {
+      "id": 1,
+      "name": "Heavy Equipment Part",
+      "parentCategoryId": null,
+      "createdAt": "2024-10-22T00:00:00Z",
+      "deletedAt": null
+    },
+    {
+      "id": 2,
+      "name": "Hose and fitting",
+      "parentCategoryId": null,
+      "createdAt": "2024-10-22T00:00:00Z",
+      "deletedAt": null
+    },
+    {
+      "id": 3,
+      "name": "Heavy Equipment",
+      "parentCategoryId": null,
+      "createdAt": "2024-10-22T00:00:00Z",
+      "deletedAt": null
+    },
+    {
+      "id": 4,
+      "name": "Undercarriage Parts",
+      "parentCategoryId": 1,
+      "createdAt": "2024-10-22T00:00:00Z",
+      "deletedAt": null
+    },
+    {
+      "id": 5,
+      "name": "Replacement Parts",
+      "parentCategoryId": 1,
+      "createdAt": "2024-10-22T00:00:00Z",
+      "deletedAt": null
+    },
+    {
+      "id": 6,
+      "name": "Others Product",
+      "parentCategoryId": 1,
+      "createdAt": "2024-10-22T00:00:00Z",
+      "deletedAt": null
+    },
+    {
+      "id": 7,
+      "name": "Industrial Hoses",
+      "parentCategoryId": 2,
+      "createdAt": "2024-10-22T00:00:00Z",
+      "deletedAt": null
+    },
+    {
+      "id": 8,
+      "name": "Industrial coupling & accesories",
+      "parentCategoryId": 2,
+      "createdAt": "2024-10-22T00:00:00Z",
+      "deletedAt": null
+    },
+    {
+      "id": 9,
+      "name": "Airman generator set",
+      "parentCategoryId": 3,
+      "createdAt": "2024-10-22T00:00:00Z",
+      "deletedAt": null
+    }
+  ],
+
+  "Product": [
+    {
+      "id": 1,
+      "name": "High Pressure Hose",
+      "description": "A durable high-pressure hose for industrial use.",
+      "createdAt": "2024-10-22T00:00:00Z",
+      "deletedAt": null,
+      "stock": 50,
+      "images": [
+        {
+          "id": 1,
+          "image": "/images/products/selang.png",
+          "createdAt": "2024-10-22T00:00:00Z",
+          "deletedAt": null
+        }
+      ],
+      "categories": [
+        {
+          "id": 1,
+          "name": "Heavy Equipment Part",
+          "parentCategoryId": null,
+          "createdAt": "2024-10-22T00:00:00Z",
+          "deletedAt": null
+        }
+      ],
+      "prices": [
+        {
+          "id": 1,
+          "productId": 1,
+          "price": 100000,
+          "createdAt": "2024-10-22T00:00:00Z",
+          "deletedAt": null
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "High Pressure Hose 2",
+      "description": "A durable high-pressure hose for industrial use.",
+      "createdAt": "2024-10-22T00:00:00Z",
+      "deletedAt": null,
+      "stock": 20,
+      "images": [
+        {
+          "id": 1,
+          "image": "/images/products/selang.png",
+          "createdAt": "2024-10-22T00:00:00Z",
+          "deletedAt": null
+        }
+      ],
+      "categories": [
+        {
+          "id": 2,
+          "name": null,
+          "parentCategoryId": null,
+          "createdAt": "2024-10-22T00:00:00Z",
+          "deletedAt": null
+        }
+      ],
+      "prices": [
+        {
+          "id": 1,
+          "productId": 1,
+          "price": 100000,
+          "createdAt": "2024-10-22T00:00:00Z",
+          "deletedAt": null
+        }
+      ]
+    }
+  ],
+  
+
+
+  "StockHistory": [
+    {
+      "id": 1,
+      "productId": 1,
+      "stock": 50,
+      "updatedAt": "2024-10-22T00:00:00Z"
+    },
+    {
+      "id": 2,
+      "productId": 1,
+      "stock": 45,
+      "updatedAt": "2024-11-01T00:00:00Z"
+    }
+  ],
+
+  "PriceHistory": [
+    {
+      "id": 1,
+      "productId": 1,
+      "price": 100000,
+      "updatedAt": "2024-10-22T00:00:00Z"
+    },
+    {
+      "id": 2,
+      "productId": 1,
+      "price": 95000,
+      "updatedAt": "2024-11-01T00:00:00Z"
+    }
+  ],
+  
+
+
+
+    "UserCategory": [
+      {
+        "id": 1,
+        "name": "VIP",
+        "createdAt": "2024-10-22T00:00:00Z",
+        "deletedAt": null
+      }
+    ],
+    "User": [
+      {
+        "id": 1,
+        "email": "john.doe@example.com",
+        "username": "johndoe",
+        "name": "John Doe",
+        "password": "hashed_password_123",
+        "birthdate": "1990-01-01T00:00:00Z",
+        "phonenumber": "+123456789",
+        "country": "USA",
+        "province": "California",
+        "address": "123 Main St",
+        "gender": "male",
+        "image": "/images/products/selang.png",
+        "token": null,
+        "categoryId": 1,
+        "createdAt": "2024-10-22T00:00:00Z",
+        "deletedAt": null,
+        "cart": {
+          "id": 1,
+          "userId": 1,
+          "createdAt": "2024-10-22T00:00:00Z",
+          "deletedAt": null
+        },
+        "orders": [
+          {
+            "id": 1,
+            "userId": 1,
+            "orderNumber": "ORD-2024-001",
+            "totalPrice": 150.50,
+            "status": "not payment",
+            "transactionToken": "token_001",
+            "createdAt": "2024-10-22T00:00:00Z",
+            "deletedAt": null
+          }
+        ],
+        "promos": [
+          {
+            "id": 1,
+            "code": "PROMO2024",
+            "discount": 10.0,
+            "startDate": "2024-10-01T00:00:00Z",
+            "endDate": "2024-12-31T00:00:00Z",
+            "createdAt": "2024-10-22T00:00:00Z",
+            "deletedAt": null
+          }
+        ]
+      }
+    ],
+    "Cart": [
+      {
+        "id": 1,
+        "userId": 1,
+        "createdAt": "2024-10-22T00:00:00Z",
+        "deletedAt": null
+      }
+    ],
+    "CartItem": [
+      {
+        "id": 1,
+        "cartId": 1,
+        "productId": 1,
+        "quantity": 2,
+        "createdAt": "2024-10-22T00:00:00Z",
+        "deletedAt": null
+      }
+    ],
+  
+  
+
+
+
+
+  
+
+
+"Event": [
+    {
+      "id": 1,
+      "name": "Sunflex store",
+      "description": "Join us for an insightful day of talks and workshops.",
+      "dateStart": "2024-10-22T10:00:00Z", 
+      "dateEnd": null,
+      "createdAt": "2024-10-22T00:00:00Z",
+      "deletedAt": null,
+      "images": [
+        {
+          "id": 1,
+          "image": "/images/event/banner1.jpg",
+          "createdAt": "2024-10-22T00:00:00Z",
+          "deletedAt": null
+        },
+        {
+          "id": 2,
+          "image": "/images/event/banner1.jpg",
+          "createdAt": "2024-10-22T00:00:00Z",
+          "deletedAt": null
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Sunflex store",
+      "description": "Experience the best live music in the city.",
+      "dateStart": "2024-10-22T10:00:00Z",
+      "dateEnd": null,
+      "createdAt": "2024-10-22T00:00:00Z",
+      "deletedAt": null,
+      "images": [
+        {
+          "id": 3,
+          "image": "/images/event/banner1.jpg",
+          "createdAt": "2024-10-22T00:00:00Z",
+          "deletedAt": null
+        }
+      ]
+    }
+  ]
+
+
+
+  
+  
+
+
+  
+
+}
+  
+  
+
+
+  
+ 

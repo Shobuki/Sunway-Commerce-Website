@@ -1,0 +1,234 @@
+erDiagram
+
+  User {
+    Int id PK 
+    String email  
+    String name  "nullable"
+    String password  
+    String username  
+    DateTime birthdate  "nullable"
+    String phonenumber  "nullable"
+    String country  "nullable"
+    String province  "nullable"
+    String address  "nullable"
+    String gender  "nullable"
+    DateTime createdAt  
+    DateTime deletedAt  "nullable"
+    String token  "nullable"
+    String image  "nullable"
+    }
+  
+
+  UserSession {
+    Int id PK 
+    String token  "nullable"
+    DateTime loginTime  
+    DateTime logoutTime  "nullable"
+    }
+  
+
+  Product {
+    Int id PK 
+    String name  
+    String description  "nullable"
+    DateTime createdAt  
+    DateTime deletedAt  "nullable"
+    Int stock  
+    }
+  
+
+  ProductImage {
+    Int id PK 
+    String image  
+    DateTime createdAt  
+    DateTime deletedAt  "nullable"
+    }
+  
+
+  StockHistory {
+    Int id PK 
+    Int stock  
+    DateTime updatedAt  
+    }
+  
+
+  PriceHistory {
+    Int id PK 
+    Float price  
+    DateTime updatedAt  
+    }
+  
+
+  Event {
+    Int id PK 
+    String name  
+    String description  "nullable"
+    DateTime dateStart  
+    DateTime dateEnd  "nullable"
+    DateTime createdAt  
+    DateTime deletedAt  "nullable"
+    }
+  
+
+  EventImage {
+    Int id PK 
+    String image  
+    DateTime createdAt  
+    DateTime deletedAt  "nullable"
+    }
+  
+
+  ProductCategory {
+    Int id PK 
+    String name  
+    DateTime createdAt  
+    DateTime deletedAt  "nullable"
+    }
+  
+
+  Order {
+    Int id PK 
+    String orderNumber  
+    Float totalPrice  
+    String status  
+    DateTime createdAt  
+    DateTime deletedAt  "nullable"
+    String transactionToken  
+    }
+  
+
+  OrderItem {
+    Int id PK 
+    Int quantity  
+    Float price  
+    DateTime createdAt  
+    DateTime deletedAt  "nullable"
+    }
+  
+
+  Cart {
+    Int id PK 
+    DateTime createdAt  
+    DateTime deletedAt  "nullable"
+    }
+  
+
+  CartItem {
+    Int id PK 
+    Int quantity  
+    DateTime createdAt  
+    DateTime deletedAt  "nullable"
+    }
+  
+
+  Promo {
+    Int id PK 
+    String code  
+    Float discount  
+    DateTime startDate  
+    DateTime endDate  
+    DateTime createdAt  
+    DateTime deletedAt  "nullable"
+    }
+  
+
+  UserCategory {
+    Int id PK 
+    String name  
+    DateTime createdAt  
+    DateTime deletedAt  "nullable"
+    }
+  
+
+  Price {
+    Int id PK 
+    Float price  
+    DateTime createdAt  
+    DateTime deletedAt  "nullable"
+    }
+  
+
+  Role {
+    Int id PK 
+    String name  
+    String description  "nullable"
+    }
+  
+
+  MenuAccess {
+    Int id PK 
+    String name  
+    String description  "nullable"
+    }
+  
+
+  Admin {
+    Int id PK 
+    String username  
+    String password  
+    String token  "nullable"
+    String image  "nullable"
+    String name  
+    DateTime birthdate  "nullable"
+    String phonenumber  "nullable"
+    String address  "nullable"
+    String gender  "nullable"
+    }
+  
+
+  AdminSession {
+    Int id PK 
+    DateTime loginTime  
+    DateTime logoutTime  "nullable"
+    }
+  
+
+  Chat {
+    Int id PK 
+    DateTime createdAt  
+    DateTime updatedAt  "nullable"
+    }
+  
+
+  Message {
+    Int id PK 
+    String message  
+    DateTime createdAt  
+    DateTime updatedAt  "nullable"
+    }
+  
+
+  ChatOrder {
+    Int id PK 
+    DateTime createdAt  
+    DateTime updatedAt  "nullable"
+    }
+  
+    User o{--|o UserCategory : "category"
+    UserSession o{--|| User : "user"
+    ProductImage o{--|| Product : "product"
+    StockHistory o{--|| Product : "product"
+    PriceHistory o{--|| Product : "product"
+    EventImage o{--|| Event : "event"
+    ProductCategory o|--|o ProductCategory : "parentCategory"
+    Order o{--|| User : "user"
+    OrderItem o{--|| Order : "order"
+    OrderItem o{--|| Product : "product"
+    Cart o|--|| User : "user"
+    CartItem o{--|| Cart : "cart"
+    CartItem o{--|| Product : "product"
+    Price o{--|o ProductCategory : "productCategory"
+    Price o{--|o Product : "product"
+    Price o{--|o UserCategory : "userCategory"
+    Price o{--|o User : "user"
+    Admin o{--|| Role : "role"
+    AdminSession o{--|| Admin : "admin"
+    Chat o{--|| User : "user"
+    Chat o{--|o Admin : "admin"
+    Message o{--|| Chat : "chat"
+    Message o{--|| User : "user"
+    Message o{--|o Admin : "admin"
+    Message o{--|o ChatOrder : "chatOrder"
+    ChatOrder o{--|| Order : "order"
+    ChatOrder o{--|| User : "user"
+    ChatOrder o{--|o Admin : "admin"

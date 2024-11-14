@@ -1,0 +1,290 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+generator erd {
+  provider = "prisma-erd-generator"
+  output   = "./prisma/ERD/diagram.png"
+  format   = "png"
+  width    = "6000"
+  height   = "4000"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          Int           @id @default(autoincrement())
+  email       String        @unique
+  name        String?
+  password    String
+  categoryId  Int?
+  username    String        @unique
+  createdAt   DateTime      @default(now())
+  deletedAt   DateTime?
+  token       String?
+  image       String?
+  address     String?
+  birthdate   DateTime?
+  country     String?
+  gender      String?
+  phonenumber String?
+  province    String?
+  cart        Cart?
+  chats       Chat[]
+  chatOrders  ChatOrder[]
+  messages    Message[]
+  orders      Order[]
+  prices      Price[]
+  category    UserCategory? @relation(fields: [categoryId], references: [id])
+  sessions    UserSession[]
+  promos      Promo[]       @relation("UserPromos")
+}
+
+model UserSession {
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  loginTime  DateTime  @default(now())
+  logoutTime DateTime?
+  token      String?
+  user       User      @relation(fields: [userId], references: [id])
+}
+
+model Product {
+  id           Int               @id @default(autoincrement())
+  name         String
+  description  String?
+  createdAt    DateTime          @default(now())
+  deletedAt    DateTime?
+  stock        Int               @default(0)
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
+  prices       Price[]
+  priceHistory PriceHistory[]
+  images       ProductImage[]
+  stockHistory StockHistory[]
+  promos       Promo[]           @relation("ProductPromos")
+  categories   ProductCategory[] @relation("ProductToProductCategory")
+}
+
+model ProductImage {
+  id        Int       @id @default(autoincrement())
+  image     String
+  productId Int
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+  product   Product   @relation(fields: [productId], references: [id])
+}
+
+model StockHistory {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  stock     Int
+  updatedAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id])
+}
+
+model PriceHistory {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  price     Float
+  updatedAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id])
+}
+
+model Event {
+  id          Int          @id @default(autoincrement())
+  name        String
+  dateStart   DateTime
+  dateEnd     DateTime?
+  createdAt   DateTime     @default(now())
+  deletedAt   DateTime?
+  description String?
+  images      EventImage[]
+}
+
+model EventImage {
+  id        Int       @id @default(autoincrement())
+  image     String
+  eventId   Int
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+  event     Event     @relation(fields: [eventId], references: [id])
+}
+
+model ProductCategory {
+  id               Int               @id @default(autoincrement())
+  name             String
+  createdAt        DateTime          @default(now())
+  deletedAt        DateTime?
+  parentCategoryId Int?
+  prices           Price[]
+  parentCategory   ProductCategory?  @relation("ParentChildCategory", fields: [parentCategoryId], references: [id])
+  subcategories    ProductCategory[] @relation("ParentChildCategory")
+  products         Product[]         @relation("ProductToProductCategory")
+}
+
+model Order {
+  id               Int         @id @default(autoincrement())
+  userId           Int
+  orderNumber      String
+  totalPrice       Float
+  createdAt        DateTime    @default(now())
+  deletedAt        DateTime?
+  transactionToken String      @unique
+  status           String
+  chatOrders       ChatOrder[]
+  user             User        @relation(fields: [userId], references: [id])
+  orderItems       OrderItem[]
+}
+
+model OrderItem {
+  id        Int       @id @default(autoincrement())
+  orderId   Int
+  productId Int
+  quantity  Int
+  price     Float
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+  order     Order     @relation(fields: [orderId], references: [id])
+  product   Product   @relation(fields: [productId], references: [id])
+}
+
+model Cart {
+  id        Int        @id @default(autoincrement())
+  userId    Int        @unique
+  createdAt DateTime   @default(now())
+  deletedAt DateTime?
+  user      User       @relation(fields: [userId], references: [id])
+  cartItems CartItem[]
+}
+
+model CartItem {
+  id        Int       @id @default(autoincrement())
+  cartId    Int
+  productId Int
+  quantity  Int
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+  cart      Cart      @relation(fields: [cartId], references: [id])
+  product   Product   @relation(fields: [productId], references: [id])
+}
+
+model Promo {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique
+  discount  Float
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+  products  Product[] @relation("ProductPromos")
+  users     User[]    @relation("UserPromos")
+}
+
+model UserCategory {
+  id        Int       @id @default(autoincrement())
+  name      String
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+  prices    Price[]
+  users     User[]
+}
+
+model Price {
+  id                Int              @id @default(autoincrement())
+  productId         Int?
+  price             Float
+  userId            Int?
+  userCategoryId    Int?
+  productCategoryId Int?
+  createdAt         DateTime         @default(now())
+  deletedAt         DateTime?
+  productCategory   ProductCategory? @relation(fields: [productCategoryId], references: [id])
+  product           Product?         @relation(fields: [productId], references: [id])
+  userCategory      UserCategory?    @relation(fields: [userCategoryId], references: [id])
+  user              User?            @relation(fields: [userId], references: [id])
+}
+
+model Role {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  description String?
+  admins      Admin[]
+  menuAccess  MenuAccess[] @relation("MenuAccessToRole")
+}
+
+model MenuAccess {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String?
+  roles       Role[]  @relation("MenuAccessToRole")
+}
+
+model Admin {
+  id            Int            @id @default(autoincrement())
+  username      String         @unique
+  password      String
+  token         String?
+  image         String?
+  name          String
+  birthdate     DateTime?
+  phonenumber   String?
+  address       String?
+  gender        String?
+  roleId        Int
+  role          Role           @relation(fields: [roleId], references: [id])
+  adminSessions AdminSession[]
+  chats         Chat[]
+  chatOrders    ChatOrder[]
+  messages      Message[]
+}
+
+model AdminSession {
+  id         Int       @id @default(autoincrement())
+  adminId    Int
+  loginTime  DateTime  @default(now())
+  logoutTime DateTime?
+  admin      Admin     @relation(fields: [adminId], references: [id])
+}
+
+model Chat {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  adminId   Int?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+  admin     Admin?    @relation(fields: [adminId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+  messages  Message[]
+}
+
+model Message {
+  id          Int        @id @default(autoincrement())
+  chatId      Int
+  chatOrderId Int?
+  message     String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime?  @updatedAt
+  userId      Int
+  adminId     Int?
+  admin       Admin?     @relation(fields: [adminId], references: [id])
+  chat        Chat       @relation(fields: [chatId], references: [id])
+  chatOrder   ChatOrder? @relation(fields: [chatOrderId], references: [id])
+  user        User       @relation(fields: [userId], references: [id])
+}
+
+model ChatOrder {
+  id        Int       @id @default(autoincrement())
+  orderId   Int
+  userId    Int
+  adminId   Int?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+  admin     Admin?    @relation(fields: [adminId], references: [id])
+  order     Order     @relation(fields: [orderId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+  messages  Message[]
+}
