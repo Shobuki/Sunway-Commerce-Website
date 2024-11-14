@@ -8,22 +8,26 @@ datasource db {
 }
 
 model Admin {
-  id           Int            @id @default(autoincrement())
-  username     String         @unique
-  password     String
-  token        String?
-  image        String?
-  name         String
-  birthdate    DateTime?
-  phonenumber  String?
-  address      String?
-  gender       String?
-  roleId       Int
-  Role         Role           @relation(fields: [roleId], references: [id])
-  AdminSession AdminSession[]
-  Chat         Chat[]
-  ChatOrder    ChatOrder[]
-  Message      Message[]
+  id              Int               @id @default(autoincrement())
+  username        String            @unique
+  password        String
+  token           String?
+  image           String?
+  name            String
+  birthdate       DateTime?
+  phonenumber     String?
+  address         String?
+  gender          String?
+  roleId          Int
+  Role            Role              @relation(fields: [roleId], references: [id])
+  createdAt       DateTime          @default(now())
+  deletedAt       DateTime?
+  returnRequests  RequestReturn[]   // Relation to RequestReturn
+  splitRequests   RequestSplitBarcode[] // Relation to RequestSplitBarcode
+  AdminSession    AdminSession[]
+  Chat            Chat[]
+  ChatOrder       ChatOrder[]
+  Message         Message[]
 }
 
 model AdminSession {
@@ -102,7 +106,7 @@ model MenuAccess {
   id          Int     @id @default(autoincrement())
   name        String  @unique
   description String?
-  Role        Role[]
+  Role        Role[]  @relation("MenuAccessToRole")
 }
 
 model Message {
@@ -132,6 +136,7 @@ model Order {
   ChatOrder        ChatOrder[]
   User             User        @relation(fields: [userId], references: [id])
   OrderItem        OrderItem[]
+  Barcode          Barcode[]   // Relation to Barcode
 }
 
 model OrderItem {
@@ -145,6 +150,25 @@ model OrderItem {
   Order     Order     @relation(fields: [orderId], references: [id])
   Product   Product   @relation(fields: [productId], references: [id])
 }
+
+model Barcode {
+  id              Int                @id @default(autoincrement())
+  code            String             @unique
+  productId       Int                // Reference to the product
+  orderId         Int                // Reference to the order
+  parentBarcodeId Int?               // Optional reference to the parent barcode
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime?          @updatedAt
+
+  Product         Product            @relation(fields: [productId], references: [id])
+  Order           Order              @relation(fields: [orderId], references: [id])
+  parentBarcode   Barcode?           @relation("BarcodeParentChild", fields: [parentBarcodeId], references: [id])
+  childBarcodes   Barcode[]          @relation("BarcodeParentChild")
+  RequestReturn   RequestReturn[]    // Relation to RequestReturn
+  RequestSplitBarcode RequestSplitBarcode[] // Relation to RequestSplitBarcode
+}
+
+
 
 model Price {
   id                Int              @id @default(autoincrement())
@@ -169,6 +193,32 @@ model PriceHistory {
   Product   Product  @relation(fields: [productId], references: [id])
 }
 
+model RequestReturn {
+  id              Int               @id @default(autoincrement())
+  barcodeId       Int               // References the Barcode
+  dealerId        Int?              // Optional dealer initiating the request
+  adminId         Int?              // Optional admin initiating the request
+  status          String            // e.g., pending, approved, rejected
+  requestedAt     DateTime          @default(now())
+
+  Barcode         Barcode           @relation(fields: [barcodeId], references: [id])
+  Dealer          Dealer?           @relation(fields: [dealerId], references: [id])
+  Admin           Admin?            @relation(fields: [adminId], references: [id])
+}
+
+model RequestSplitBarcode {
+  id              Int               @id @default(autoincrement())
+  barcodeId       Int               // References the Barcode
+  dealerId        Int?              // Optional dealer initiating the request
+  adminId         Int?              // Optional admin initiating the request
+  status          String            // e.g., pending, approved, rejected
+  requestedAt     DateTime          @default(now())
+
+  Barcode         Barcode           @relation(fields: [barcodeId], references: [id])
+  Dealer          Dealer?           @relation(fields: [dealerId], references: [id])
+  Admin           Admin?            @relation(fields: [adminId], references: [id])
+}
+
 model Product {
   id              Int               @id @default(autoincrement())
   name            String
@@ -183,7 +233,8 @@ model Product {
   ProductImage    ProductImage[]
   StockHistory    StockHistory[]
   Promo           Promo[]           @relation("ProductPromos")
-  ProductCategory ProductCategory[]
+  ProductCategory ProductCategory[] @relation("ProductToProductCategory")
+  Barcode         Barcode[]         // Relation to Barcode
 }
 
 model ProductCategory {
@@ -195,7 +246,7 @@ model ProductCategory {
   Price                 Price[]
   ProductCategory       ProductCategory?  @relation("ProductCategoryToProductCategory", fields: [parentCategoryId], references: [id])
   other_ProductCategory ProductCategory[] @relation("ProductCategoryToProductCategory")
-  Product               Product[]
+  Product               Product[]         @relation("ProductToProductCategory")
 }
 
 model ProductImage {
@@ -224,7 +275,7 @@ model Role {
   name        String       @unique
   description String?
   Admin       Admin[]
-  MenuAccess  MenuAccess[]
+  MenuAccess  MenuAccess[] @relation("MenuAccessToRole")
 }
 
 model StockHistory {
@@ -234,6 +285,17 @@ model StockHistory {
   updatedAt DateTime @default(now())
   Product   Product  @relation(fields: [productId], references: [id])
 }
+
+model Dealer {
+  id              Int               @id @default(autoincrement())
+  username        String            @unique
+  password        String
+  name            String
+  createdAt       DateTime          @default(now())
+  returnRequests  RequestReturn[]   // Relation to RequestReturn
+  splitRequests   RequestSplitBarcode[] // Relation to RequestSplitBarcode
+}
+
 
 model User {
   id           Int           @id @default(autoincrement())
