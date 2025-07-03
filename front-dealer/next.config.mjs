@@ -9,9 +9,10 @@ const nextConfig = {
     ];
   },
   images: {
-    domains: [], // List any external domains you use here
-    loader: 'default', // This uses Next.js' built-in image optimization loader
-    path: '/', // Base path for images. Adjust if your images are served from a different path
+    domains: ['localhost'], // Tambahkan localhost sebagai domain gambar
+    loader: 'default',
+    path: '/',
+    unoptimized: true,
   },
 };
 

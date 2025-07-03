@@ -1,0 +1,20 @@
+model Dealer {
+  Id              Int               @id @default(autoincrement())
+  CompanyName     String            @db.VarChar(100)
+  Region          String?           @db.VarChar(50)
+  StoreCode       String            @db.VarChar(30)
+  Address         String?           @db.VarChar(150)
+  PhoneNumber     String?           @db.VarChar(20)
+  fax             String?           @db.VarChar(20)
+  PriceCategoryId Int?
+  CreatedAt       DateTime          @default(now())
+  DeletedAt       DateTime?
+  PriceCategory   PriceCategory?    @relation(fields: [PriceCategoryId], references: [Id])
+  DealerWarehouse DealerWarehouse[]
+  Price           Price[]
+  SalesOrders     SalesOrder[]
+  User            User[]            @relation("UserDealers")
+  Sales           Sales[]           @relation("DealerSales")
+
+  @@schema("public")
+}

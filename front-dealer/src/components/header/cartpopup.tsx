@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
-
-interface Product {
-  id: number;
-  name: string;
-  description: string | null;
-  price: number;
-  imageUrl: string;
-}
+import { useRouter } from 'next/router';
 
 interface CartItem {
-  id: number;
-  product: Product;
-  quantity: number;
+  Id: number;
+  Quantity: number;
+  ItemCode: {
+    Id: number;
+    Name: string;
+    OEM: string;
+    StockingTypeCode: string;
+    SalesCode: string;
+    Weight: number;
+  };
 }
 
 interface CartPopupProps {
@@ -21,100 +21,93 @@ interface CartPopupProps {
 
 const CartPopup: React.FC<CartPopupProps> = ({ isOpen, onClose }) => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const router = useRouter();
 
-  // Fetch cart items when the popup is open
+  // Pada CartPopup.tsx - Perbaikan di useEffect
   useEffect(() => {
-    async function fetchCartItems() {
+    const fetchCartItems = async () => {
       try {
-        const token = sessionStorage.getItem('userToken'); // Ambil token dari sessionStorage
-        if (!token) {
-          setIsLoggedIn(false);
+        const token = sessionStorage.getItem('userToken');
+        const userId = sessionStorage.getItem('userId');
+    
+        console.log("Session Storage:", {
+          token: token?.slice(0, 10) + "...",
+          userId
+        });
+    
+        if (!token || !userId) {
+          router.push('/login');
           return;
         }
-        setIsLoggedIn(true); // Set user sebagai logged in
-
-        const response = await fetch('/api/cart/cart', {
+    
+        const response = await fetch('http://localhost:3000/api/dealer/dealer/cart/get', {
+          method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`, // Kirim token di header
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({ UserId: parseInt(userId, 10) }), // pastikan ini number
         });
+    
+        if (response.status === 404) {
+          setCartItems([]); // kosongkan cart
+          return;
+        }
+        
 
         if (!response.ok) {
-          throw new Error('Gagal mengambil data keranjang');
+          const text = await response.text();
+          throw new Error(`HTTP error ${response.status}: ${text}`);
         }
 
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`HTTP error ${response.status}: ${errText}`);
+        }
+        
+    
+        const contentType = response.headers.get('content-type');
+        if (!contentType?.includes('application/json')) {
+          const text = await response.text();
+          throw new Error(`Response invalid: ${text.slice(0, 100)}`);
+        }
+    
         const data = await response.json();
-        setCartItems(data);
-        setError(null); // Clear any previous errors
+        console.log("Full data response:", data); // Debug tambahan
+    
+        if (!data?.data?.CartItems) {
+          throw new Error('Struktur data cart tidak valid');
+        }
+    
+        setCartItems(data.data.CartItems.map((item: any) => ({
+          Id: item.Id,
+          Quantity: item.Quantity,
+          ItemCode: {
+            Id: item.ItemCode.Id,
+            Name: item.ItemCode.Name,
+            OEM: item.ItemCode.OEM,
+            StockingTypeCode: item.ItemCode.StockingTypeCode,
+            SalesCode: item.ItemCode.SalesCode,
+            Weight: item.ItemCode.Weight
+          }
+        })) || []);
+        
+        console.log("CartPopup Loaded");
       } catch (error) {
-        console.error('Error fetching cart items:', error);
-        setError('Gagal mengambil data keranjang');
+        console.error('Error:', error instanceof Error ? error.message : error);
+        setError(error instanceof Error ? error.message : 'An unknown error occurred');
       }
-    }
+    };
+    
 
-    if (isOpen) {
-      fetchCartItems();
-    }
+    if (isOpen) fetchCartItems();
   }, [isOpen]);
 
-  // Function to update quantity in the backend
-  const updateCartQuantity = async (itemId: number, newQuantity: number) => {
-    try {
-      const token = sessionStorage.getItem('userToken');
-      if (!token) {
-        setError('Ayo login dulu');
-        return;
-      }
-
-      const response = await fetch('/api/cart/update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ itemId, quantity: newQuantity }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Terjadi error sistem');
-      }
-
-      const data = await response.json();
-      setError(null); // Clear error if update succeeds
-    } catch (error) {
-      console.error('Error updating cart item:', error);
-      setError('Terjadi error sistem');
-    }
-  };
-
-  // Handlers for increasing and decreasing quantity
-  const handleIncreaseQuantity = (itemId: number) => {
-    setCartItems((prevItems) =>
-      prevItems.map((item) => {
-        if (item.id === itemId) {
-          const newQuantity = item.quantity + 1;
-          updateCartQuantity(itemId, newQuantity);
-          return { ...item, quantity: newQuantity };
-        }
-        return item;
-      })
-    );
-  };
-
-  const handleDecreaseQuantity = (itemId: number) => {
-    setCartItems((prevItems) =>
-      prevItems.map((item) => {
-        if (item.id === itemId && item.quantity > 1) {
-          const newQuantity = item.quantity - 1;
-          updateCartQuantity(itemId, newQuantity);
-          return { ...item, quantity: newQuantity };
-        }
-        return item;
-      })
-    );
+  const handleCheckout = () => {
+    onClose(); // Close the popup
+    router.push('/checkout/checkoutpage'); // Navigate to the checkout page
   };
 
   if (!isOpen) return null;
@@ -122,37 +115,34 @@ const CartPopup: React.FC<CartPopupProps> = ({ isOpen, onClose }) => {
   return (
     <div className="cart-popup bg-white p-4 rounded-lg shadow-lg w-80">
       <h2 className="font-bold text-lg mb-4">Your Cart</h2>
+
       {error ? (
         <p className="text-red-500">{error}</p>
       ) : cartItems.length === 0 ? (
         <p className="text-gray-700">
-          {isLoggedIn ? 'Keranjang kamu kosong, ayo isi' : 'Ayo login dulu'}
+          {isLoggedIn ? 'Your cart is empty.' : 'Please login to view your cart.'}
         </p>
       ) : (
-        cartItems.map((item) => (
-          <div key={item.id} className="flex items-center mb-4">
-            <img src={item.product.imageUrl} alt={item.product.name} className="w-12 h-12 mr-4" />
-            <div className="flex-1">
-              <h3 className="font-semibold">{item.product.name}</h3>
-              <p className="text-gray-600">${item.product.price.toFixed(2)}</p>
-              <div className="flex items-center mt-2">
-                <button
-                  onClick={() => handleDecreaseQuantity(item.id)}
-                  className="px-2 py-1 border rounded-l-md bg-gray-200 hover:bg-gray-300"
-                >
-                  -
-                </button>
-                <span className="px-4 py-1 border-t border-b text-center">{item.quantity}</span>
-                <button
-                  onClick={() => handleIncreaseQuantity(item.id)}
-                  className="px-2 py-1 border rounded-r-md bg-gray-200 hover:bg-gray-300"
-                >
-                  +
-                </button>
+        <>
+          <div className="space-y-4 max-h-60 overflow-y-auto">
+            {cartItems.map((item) => (
+              <div key={item.Id} className="flex items-center border-b pb-2">
+                <div className="flex-1">
+                  <h3 className="font-semibold">{item.ItemCode.Name}</h3>
+                  <p className="text-gray-600 text-sm">Weight: {item.ItemCode.Weight}kg</p>
+                  <p className="text-gray-600 text-sm">Qty: {item.Quantity}</p>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
-        ))
+
+          <button
+            onClick={handleCheckout}
+            className="w-full mt-4 bg-red-600 text-white py-2 rounded-md hover:bg-red-700 transition"
+          >
+            Proceed to Checkout
+          </button>
+        </>
       )}
     </div>
   );

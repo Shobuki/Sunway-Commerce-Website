@@ -1,0 +1,163 @@
+model SalesOrder {
+  Id                  Int                @id @default(autoincrement())
+  SalesOrderNumber    String?
+  JdeSalesOrderNumber String?
+  DealerId            Int
+  UserId              Int
+  SalesId             Int
+  Status              SalesOrderStatus   @default(PENDING_APPROVAL)
+  Note                String?
+  PaymentTerm         Int?
+  FOB                 String?
+  CustomerPoNumber    String?
+  DeliveryOrderNumber String?
+  CreatedAt           DateTime           @default(now())
+  DeletedAt           DateTime?
+  TransactionToken    String
+  EmailSalesOrders    EmailSalesOrder[]
+  Dealer              Dealer             @relation(fields: [DealerId], references: [Id])
+  Sales               Sales              @relation(fields: [SalesId], references: [Id])
+  User                User               @relation(fields: [UserId], references: [Id])
+  SalesOrderDetails   SalesOrderDetail[]
+  SalesOrderFile      SalesOrderFile?
+
+  @@schema("public")
+}
+
+model SalesOrderDetail {
+  Id                Int               @id @default(autoincrement())
+  SalesOrderId      Int
+  ItemCodeId        Int
+  WarehouseId       Int?
+  Quantity          Int
+  Price             Float
+  FinalPrice        Float
+  PriceCategoryId   Int?
+  FulfillmentStatus FulfillmentStatus @default(READY)
+  TaxId             Int?
+  ItemCode          ItemCode          @relation(fields: [ItemCodeId], references: [Id])
+  PriceCategory     PriceCategory?    @relation(fields: [PriceCategoryId], references: [Id])
+  SalesOrder        SalesOrder        @relation(fields: [SalesOrderId], references: [Id])
+  Tax               Tax?              @relation(fields: [TaxId], references: [Id])
+  Warehouse         Warehouse?        @relation(fields: [WarehouseId], references: [Id])
+
+  @@schema("public")
+}
+
+model Tax {
+  Id                Int                @id @default(autoincrement())
+  Name              String?
+  Percentage        Float
+  IsActive          Boolean            @default(true)
+  CreatedAt         DateTime           @default(now())
+  UpdatedAt         DateTime?          @updatedAt
+  DeletedAt         DateTime?
+  SalesOrderDetails SalesOrderDetail[]
+
+  @@schema("public")
+}
+
+model SalesOrderFile {
+  Id           Int        @id @default(autoincrement())
+  SalesOrderId Int        @unique
+  ExcelFile    String?
+  PdfFile      String?
+  CreatedAt    DateTime   @default(now())
+  UpdatedAt    DateTime?  @updatedAt
+  SalesOrder   SalesOrder @relation(fields: [SalesOrderId], references: [Id])
+
+  @@schema("public")
+}
+
+model EmailSalesOrder {
+  Id              Int            @id @default(autoincrement())
+  SalesOrderId    Int
+  SenderEmail     String?
+  RecipientEmail  String
+  Subject         String
+  Body            String?
+  Status          EmailStatus    @default(PENDING)
+  CreatedAt       DateTime       @default(now())
+  UpdatedAt       DateTime?
+  DeletedAt       DateTime?
+  ApprovedAt      DateTime?
+  EmailTemplateId Int?
+  EmailTemplate   EmailTemplate? @relation(fields: [EmailTemplateId], references: [Id])
+  SalesOrder      SalesOrder     @relation(fields: [SalesOrderId], references: [Id])
+
+  @@schema("public")
+}
+
+model EmailSalesOrderRecipient {
+  Id             Int       @id @default(autoincrement())
+  SalesId        Int
+  RecipientEmail String
+  CreatedAt      DateTime  @default(now())
+  DeletedAt      DateTime?
+  Sales          Sales     @relation(fields: [SalesId], references: [Id])
+
+  @@schema("public")
+}
+
+model EmailConfig {
+  Id        Int       @id @default(autoincrement())
+  Email     String    @unique
+  Password  String
+  Host      String    @default("smtp.gmail.com")
+  Port      Int       @default(465)
+  Secure    Boolean   @default(true)
+  IsActive  Boolean   @default(true)
+  CreatedAt DateTime  @default(now())
+  UpdatedAt DateTime? @updatedAt
+  DeletedAt DateTime?
+
+  @@schema("public")
+}
+
+model EmailTemplate {
+  Id                        Int                          @id @default(autoincrement())
+  Name                      String
+  Subject                   String?
+  Body                      String?
+  CreatedAt                 DateTime                     @default(now())
+  TemplateType              EmailTemplateType?
+  UpdatedAt                 DateTime?
+  DeletedAt                 DateTime?
+  UsedInAdminForgotPassword AdminForgotPasswordRequest[]
+  UsedInSalesOrders         EmailSalesOrder[]
+  UsedInUserForgotPassword  UserForgotPasswordRequest[]
+
+  @@schema("public")
+}
+
+enum SalesOrderStatus {
+  PENDING_APPROVAL
+  APPROVED_EMAIL_SENT
+  NEEDS_REVISION
+  REJECTED
+
+  @@schema("public")
+}
+
+enum FulfillmentStatus {
+  READY
+  IN_PO
+
+  @@schema("public")
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+
+  @@schema("public")
+}
+
+enum EmailTemplateType {
+  SALES_ORDER
+  FORGOT_PASSWORD_USER
+  FORGOT_PASSWORD_ADMIN
+
+  @@schema("public")
+}

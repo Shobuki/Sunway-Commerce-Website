@@ -1,0 +1,184 @@
+model Product {
+  Id              Int               @id @default(autoincrement())
+  Name            String
+  CodeName        String?
+  Description     String?
+  CreatedAt       DateTime          @default(now())
+  DeletedAt       DateTime?
+  PartNumber      PartNumber[]
+  ProductImage    ProductImage[]
+  ProductCategory ProductCategory[] @relation("ProductToProductCategory")
+
+  @@schema("public")
+}
+
+model PartNumber {
+  Id               Int        @id @default(autoincrement())
+  Name             String
+  Description      String?
+  Dash             Int?
+  InnerDiameter    Float?
+  OuterDiameter    Float?
+  WorkingPressure  Float?
+  BurstingPressure Float?
+  BendingRadius    Float?
+  HoseWeight       Float?
+  CreatedAt        DateTime   @default(now())
+  DeletedAt        DateTime?
+  ProductId        Int?
+  ItemCode         ItemCode[] @relation("PartNumberToItemCode")
+  Product          Product?   @relation(fields: [ProductId], references: [Id])
+
+  @@schema("public")
+}
+
+model ItemCode {
+  Id                     Int                @id @default(autoincrement())
+  CreatedAt              DateTime           @default(now())
+  DeletedAt              DateTime?
+  Name                   String
+  BrandCodeId            Int?
+  OEM                    String?
+  Weight                 Float?
+  AllowItemCodeSelection Boolean            @default(false)
+  MinOrderQuantity       Int?
+  QtyPO                  Float?
+  OrderStep              Int?
+  PartNumberId           Int?
+  CartItem               CartItem[]
+  ProductBrand           ProductBrand?      @relation(fields: [BrandCodeId], references: [Id])
+  PartNumber             PartNumber?        @relation("PartNumberToItemCode", fields: [PartNumberId], references: [Id])
+  ItemCodeImage          ItemCodeImage[]
+  Price                  Price[]
+  PriceHistory           PriceHistory[]
+  SalesOrderDetail       SalesOrderDetail[]
+  StockHistories         StockHistory[]
+  WarehouseStocks        WarehouseStock[]
+
+  @@schema("public")
+}
+
+model ItemCodeImage {
+  Id         Int       @id @default(autoincrement())
+  Image      String?
+  ItemCodeId Int
+  CreatedAt  DateTime  @default(now())
+  DeletedAt  DateTime?
+  ItemCode   ItemCode  @relation(fields: [ItemCodeId], references: [Id])
+
+  @@schema("public")
+}
+
+model Warehouse {
+  Id                Int                @id @default(autoincrement())
+  Name              String?
+  BusinessUnit      String
+  Location          String?
+  CreatedAt         DateTime           @default(now())
+  DeletedAt         DateTime?
+  DealerWarehouse   DealerWarehouse[]
+  SalesOrderDetails SalesOrderDetail[]
+  Stocks            WarehouseStock[]
+
+  @@schema("public")
+}
+
+model WarehouseStock {
+  Id             Int            @id @default(autoincrement())
+  WarehouseId    Int
+  ItemCodeId     Int
+  QtyOnHand      Float          @default(0)
+  UpdatedAt      DateTime       @default(now())
+  CreatedAt      DateTime       @default(now())
+  DeletedAt      DateTime?
+  StockHistories StockHistory[]
+  ItemCode       ItemCode       @relation(fields: [ItemCodeId], references: [Id])
+  Warehouse      Warehouse      @relation(fields: [WarehouseId], references: [Id])
+
+  @@unique([WarehouseId, ItemCodeId])
+  @@schema("public")
+}
+
+model DealerWarehouse {
+  Id          Int       @id @default(autoincrement())
+  DealerId    Int
+  WarehouseId Int
+  Priority    Int?
+  Dealer      Dealer    @relation(fields: [DealerId], references: [Id])
+  Warehouse   Warehouse @relation(fields: [WarehouseId], references: [Id])
+
+  @@unique([DealerId, WarehouseId])
+  @@schema("public")
+}
+
+model ProductBrand {
+  Id               Int        @id @default(autoincrement())
+  ProductBrandName String?
+  ProductBrandCode String?
+  ItemCode         ItemCode[]
+
+  @@schema("public")
+}
+
+model ProductImage {
+  Id        Int       @id @default(autoincrement())
+  Image     String?
+  ProductId Int
+  CreatedAt DateTime  @default(now())
+  DeletedAt DateTime?
+  Product   Product   @relation(fields: [ProductId], references: [Id])
+
+  @@schema("public")
+}
+
+model ProductCategory {
+  Id                   Int                    @id @default(autoincrement())
+  Name                 String
+  CreatedAt            DateTime               @default(now())
+  DeletedAt            DateTime?
+  ParentCategoryId     Int?
+  ParentCategory       ProductCategory?       @relation("ParentToChild", fields: [ParentCategoryId], references: [Id])
+  SubCategories        ProductCategory[]      @relation("ParentToChild")
+  ProductCategoryImage ProductCategoryImage[]
+  Products             Product[]              @relation("ProductToProductCategory")
+
+  @@schema("public")
+}
+
+model ProductCategoryImage {
+  Id                Int             @id @default(autoincrement())
+  Image             String?
+  ProductCategoryId Int
+  CreatedAt         DateTime        @default(now())
+  DeletedAt         DateTime?
+  ProductCategory   ProductCategory @relation(fields: [ProductCategoryId], references: [Id])
+
+  @@schema("public")
+}
+
+model StockHistory {
+  Id               Int                         @id @default(autoincrement())
+  WarehouseStockId Int?
+  ItemCodeId       Int
+  QtyBefore        Float?
+  QtyAfter         Float?
+  Note             String?
+  UpdatedAt        DateTime                    @default(now())
+  UploadLogId      Int?
+  AdminId          Int?
+  Admin            Admin?                      @relation(fields: [AdminId], references: [Id])
+  ItemCode         ItemCode                    @relation(fields: [ItemCodeId], references: [Id])
+  UploadLog        StockHistoryExcelUploadLog? @relation("ExcelUploadLogToStockHistories", fields: [UploadLogId], references: [Id])
+  WarehouseStock   WarehouseStock?             @relation(fields: [WarehouseStockId], references: [Id])
+
+  @@schema("public")
+}
+
+model StockHistoryExcelUploadLog {
+  Id        Int            @id @default(autoincrement())
+  FilePath  String
+  CreatedAt DateTime       @default(now())
+  Histories StockHistory[] @relation("ExcelUploadLogToStockHistories")
+
+  @@schema("public")
+}

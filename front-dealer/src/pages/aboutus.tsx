@@ -1,5 +1,4 @@
 import Navbar from '../components/header/navbar';
-import Sidebar from '../components/header/sidebar';
 import React from 'react';
 import { motion } from 'framer-motion';
 

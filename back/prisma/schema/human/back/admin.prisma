@@ -1,0 +1,52 @@
+model Admin {
+  Id                     Int                          @id @unique @default(autoincrement())
+  Username               String                       @db.VarChar(30)
+  Password               String                       @db.VarChar(150)
+  Email                  String                       @db.VarChar(75)
+  Token                  String?                      @db.VarChar(300)
+  Image                  String?                      @db.VarChar(255)
+  Name                   String?                      @db.VarChar(50)
+  Birthdate              DateTime?
+  PhoneNumber            String?                      @db.VarChar(20)
+  Address                String?                      @db.VarChar(150)
+  Gender                 String?                      @db.VarChar(10)
+  RoleId                 Int
+  CreatedAt              DateTime                     @default(now())
+  DeletedAt              DateTime?
+  AdminRole              AdminRole                    @relation(fields: [RoleId], references: [Id])
+  ForgotPasswordRequests AdminForgotPasswordRequest[]
+  AdminSession           AdminSession[]
+  Sales                  Sales?
+  StockHistory           StockHistory[]
+
+  @@schema("public")
+}
+
+model AdminSession {
+  Id         Int       @id @default(autoincrement())
+  AdminId    Int
+  LoginTime  DateTime  @default(now())
+  LogoutTime DateTime?
+  Device     String?   @db.VarChar(200)
+  UserAgent  String?   @db.VarChar(300)
+  Admin      Admin     @relation(fields: [AdminId], references: [Id])
+
+  @@schema("public")
+}
+
+model AdminForgotPasswordRequest {
+  Id              Int            @id @default(autoincrement())
+  AdminId         Int
+  Token           String         @unique @db.VarChar(250)  
+  IsUsed          Boolean        @default(false)
+  ExpiresAt       DateTime
+  SenderEmail     String?        @db.VarChar(75)
+  Status          EmailStatus    @default(PENDING)
+  ErrorMessage    String?        @db.VarChar(255)
+  CreatedAt       DateTime       @default(now())
+  EmailTemplateId Int?
+  Admin           Admin          @relation(fields: [AdminId], references: [Id])
+  EmailTemplate   EmailTemplate? @relation(fields: [EmailTemplateId], references: [Id])
+
+  @@schema("public")
+}

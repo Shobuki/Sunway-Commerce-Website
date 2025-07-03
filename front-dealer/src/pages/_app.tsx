@@ -1,6 +1,8 @@
-import '../app/globals.css';  // Make sure your CSS import is correct
-import { AppProps } from 'next/app';  // Import AppProps from next/app
+// src/pages/_app.tsx
+
+import { AppProps } from 'next/app';
 import { AuthProvider } from '../context/authContext';
+import '../styles/global.css'; // Import global CSS
 
 function MyApp({ Component, pageProps }: AppProps) {
   return (

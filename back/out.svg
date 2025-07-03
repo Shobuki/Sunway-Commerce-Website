@@ -1,0 +1,169 @@
+<svg version="1.1" baseProfile="full" width="1286.0" height="273.0" viewBox="0 0 1286 273" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:ev="http://www.w3.org/2001/xml-events">
+<desc >#.interface: fill=lightblue
+#.enumeration: fill=lightgreen
+#.type: fill=lightgray
+
+[&lt;interface&gt;CustomJwtPayload|+UserId: number|]
+[JwtPayload]&lt;:--[CustomJwtPayload]
+[&lt;interface&gt;Dealer|+Id: number;+CompanyName: string|]
+[&lt;interface&gt;Price|+Price: number;+Dealer: string|]
+[&lt;interface&gt;PriceCategory|+PriceCategory: string;+Prices: Price\[\];+Dealers: Dealer\[\]|]
+[&lt;interface&gt;ItemCode|+ItemCode: string;+PriceCategories: Record&lt;string, PriceCategory&gt;|]
+[&lt;interface&gt;CustomJwtPayload|+UserId: number|]
+[JwtPayload]&lt;:--[CustomJwtPayload]</desc>
+<g stroke-width="1.0" text-align="left" font="12pt Helvetica, Arial, sans-serif" font-size="12pt" font-family="Helvetica" font-weight="normal" font-style="normal">
+<g font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" stroke-width="3.0" stroke-linejoin="round" stroke-linecap="round" stroke="#33322E">
+<g stroke="transparent" fill="transparent">
+<rect x="0.0" y="0.0" height="273.0" width="1286.0" stroke="none"></rect>
+</g>
+<g transform="translate(8, 8)" fill="#33322E">
+<g transform="translate(20, 20)" fill="#eee8d5" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal">
+<g stroke-dasharray="6 6">
+<path d="M75.0 81.4 L63 125 L70.14285714285714 145 L70.1 145.0 " fill="none"></path>
+</g>
+<path d="M80.2 82.8 L75.0 81.4 L69.9 79.9 L78.6 68.5 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M91.0 81.4 L103 125 L95.85714285714286 145 L95.9 145.0 " fill="none"></path>
+</g>
+<path d="M96.1 79.9 L91.0 81.4 L85.8 82.8 L87.4 68.5 Z"></path>
+<g data-name="CustomJwtPayload">
+<g fill="lightblue" stroke="#33322E" data-name="CustomJwtPayload">
+<rect x="0.0" y="145.0" height="72.0" width="166.0" data-name="CustomJwtPayload"></rect>
+<path d="M0.0 177.0 L166.0 177.0" fill="none" data-name="CustomJwtPayload"></path>
+<path d="M0.0 209.0 L166.0 209.0" fill="none" data-name="CustomJwtPayload"></path>
+</g>
+<g transform="translate(0, 145)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="CustomJwtPayload" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="CustomJwtPayload" data-compartment="0">
+<a id="src\controllers\dealer-api\user\auth.ts.CustomJwtPayload" xlink:href="src\controllers\dealer-api\user\auth.ts"><text x="75.0" y="14.1" stroke="none" text-anchor="middle" data-name="CustomJwtPayload" data-compartment="0">CustomJwtPayload</text></a>
+
+</g>
+</g>
+<g transform="translate(0, 177)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="CustomJwtPayload" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="CustomJwtPayload" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="CustomJwtPayload" data-compartment="1">+UserId: number</text>
+
+</g>
+</g>
+<g transform="translate(0, 209)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="CustomJwtPayload" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="CustomJwtPayload" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="JwtPayload">
+<g fill="#eee8d5" stroke="#33322E" data-name="JwtPayload">
+<rect x="30.0" y="36.5" height="32.0" width="106.0" data-name="JwtPayload"></rect>
+</g>
+<g transform="translate(30, 36.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="JwtPayload" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="JwtPayload" data-compartment="0">
+<text x="45.0" y="14.1" stroke="none" text-anchor="middle" data-name="JwtPayload" data-compartment="0">JwtPayload</text>
+
+</g>
+</g>
+</g>
+<g data-name="Dealer">
+<g fill="lightblue" stroke="#33322E" data-name="Dealer">
+<rect x="176.0" y="8.5" height="88.0" width="201.0" data-name="Dealer"></rect>
+<path d="M176.0 40.5 L377.0 40.5" fill="none" data-name="Dealer"></path>
+<path d="M176.0 88.5 L377.0 88.5" fill="none" data-name="Dealer"></path>
+</g>
+<g transform="translate(176, 8.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="Dealer" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="Dealer" data-compartment="0">
+<a id="src\controllers\admin-api\manageprice\CrudPrice.ts.Dealer" xlink:href="src\controllers\admin-api\manageprice\CrudPrice.ts"><text x="92.5" y="14.1" stroke="none" text-anchor="middle" data-name="Dealer" data-compartment="0">Dealer</text></a>
+
+</g>
+</g>
+<g transform="translate(176, 40.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="Dealer" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="Dealer" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="Dealer" data-compartment="1">+Id: number</text>
+<text x="0.0" y="30.3" stroke="none" data-name="Dealer" data-compartment="1">+CompanyName: string</text>
+
+</g>
+</g>
+<g transform="translate(176, 88.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="Dealer" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="Dealer" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="Price">
+<g fill="lightblue" stroke="#33322E" data-name="Price">
+<rect x="417.0" y="8.5" height="88.0" width="136.0" data-name="Price"></rect>
+<path d="M417.0 40.5 L553.0 40.5" fill="none" data-name="Price"></path>
+<path d="M417.0 88.5 L553.0 88.5" fill="none" data-name="Price"></path>
+</g>
+<g transform="translate(417, 8.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="Price" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="Price" data-compartment="0">
+<a id="src\controllers\admin-api\manageprice\CrudPrice.ts.Price" xlink:href="src\controllers\admin-api\manageprice\CrudPrice.ts"><text x="60.0" y="14.1" stroke="none" text-anchor="middle" data-name="Price" data-compartment="0">Price</text></a>
+
+</g>
+</g>
+<g transform="translate(417, 40.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="Price" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="Price" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="Price" data-compartment="1">+Price: number</text>
+<text x="0.0" y="30.3" stroke="none" data-name="Price" data-compartment="1">+Dealer: string</text>
+
+</g>
+</g>
+<g transform="translate(417, 88.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="Price" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="Price" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="PriceCategory">
+<g fill="lightblue" stroke="#33322E" data-name="PriceCategory">
+<rect x="593.0" y="0.0" height="105.0" width="192.0" data-name="PriceCategory"></rect>
+<path d="M593.0 32.0 L785.0 32.0" fill="none" data-name="PriceCategory"></path>
+<path d="M593.0 97.0 L785.0 97.0" fill="none" data-name="PriceCategory"></path>
+</g>
+<g transform="translate(593, 0)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="PriceCategory" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="PriceCategory" data-compartment="0">
+<a id="src\controllers\admin-api\manageprice\CrudPrice.ts.PriceCategory" xlink:href="src\controllers\admin-api\manageprice\CrudPrice.ts"><text x="88.0" y="14.1" stroke="none" text-anchor="middle" data-name="PriceCategory" data-compartment="0">PriceCategory</text></a>
+
+</g>
+</g>
+<g transform="translate(593, 32)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="PriceCategory" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="PriceCategory" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="PriceCategory" data-compartment="1">+PriceCategory: string</text>
+<text x="0.0" y="30.3" stroke="none" data-name="PriceCategory" data-compartment="1">+Prices: Price[]</text>
+<text x="0.0" y="46.5" stroke="none" data-name="PriceCategory" data-compartment="1">+Dealers: Dealer[]</text>
+
+</g>
+</g>
+<g transform="translate(593, 97)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="PriceCategory" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="PriceCategory" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="ItemCode">
+<g fill="lightblue" stroke="#33322E" data-name="ItemCode">
+<rect x="825.0" y="8.5" height="88.0" width="405.0" data-name="ItemCode"></rect>
+<path d="M825.0 40.5 L1230.0 40.5" fill="none" data-name="ItemCode"></path>
+<path d="M825.0 88.5 L1230.0 88.5" fill="none" data-name="ItemCode"></path>
+</g>
+<g transform="translate(825, 8.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ItemCode" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="ItemCode" data-compartment="0">
+<a id="src\controllers\admin-api\manageprice\CrudPrice.ts.ItemCode" xlink:href="src\controllers\admin-api\manageprice\CrudPrice.ts"><text x="194.5" y="14.1" stroke="none" text-anchor="middle" data-name="ItemCode" data-compartment="0">ItemCode</text></a>
+
+</g>
+</g>
+<g transform="translate(825, 40.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ItemCode" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="ItemCode" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="ItemCode" data-compartment="1">+ItemCode: string</text>
+<text x="0.0" y="30.3" stroke="none" data-name="ItemCode" data-compartment="1">+PriceCategories: Record&lt;string, PriceCategory&gt;</text>
+
+</g>
+</g>
+<g transform="translate(825, 88.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ItemCode" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="ItemCode" data-compartment="2">
+
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+</svg>

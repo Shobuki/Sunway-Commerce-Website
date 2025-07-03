@@ -1,0 +1,10 @@
+model Sales {
+  Id              Int                        @id @default(autoincrement())
+  AdminId         Int                        @unique
+  EmailRecipients EmailSalesOrderRecipient[]
+  Admin           Admin                      @relation(fields: [AdminId], references: [Id])
+  SalesOrders     SalesOrder[]
+  Dealers         Dealer[]                   @relation("DealerSales")
+
+  @@schema("public")
+}

@@ -1,36 +1,37 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 
 const Login = () => {
-  const [identifier, setIdentifier] = useState(''); // identifier bisa berupa email atau username
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false); // State untuk menampilkan modal
-  const [modalMessage, setModalMessage] = useState(''); // Pesan yang akan ditampilkan di modal
+  const [showModal, setShowModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // API call to authenticate user
-      const response = await fetch('/api/user/login', {
+      const response = await fetch('http://localhost:3000/api/dealer/dealer/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier, password }), // kirim identifier dan password
+        body: JSON.stringify({ identifier, password }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        setModalMessage('Invalid username/email or password');
-        setShowModal(true); // Menampilkan modal dengan pesan error
+        setModalMessage(data.message || 'Login failed. Please try again.');
+        setShowModal(true);
         return;
       }
 
-      // Handle session logic
-      const data = await response.json();
-      sessionStorage.setItem('userToken', data.token); // simpan token dalam sessionStorage
+      // Save token and user ID to sessionStorage
+      sessionStorage.setItem('userToken', data.token);
+      sessionStorage.setItem('userId', data.user.UserId.toString());
 
-      setModalMessage('Login successful!'); // Menampilkan modal dengan pesan berhasil login
+      setModalMessage('Login successful!');
       setShowModal(true);
     } catch (error) {
       console.error('Login error:', error);
@@ -38,14 +39,26 @@ const Login = () => {
     }
   };
 
-  const handleCloseModal = () => {
-    setShowModal(false);
-    if (modalMessage === 'Login successful!') {
-      router.push('/home'); // Redirect ke halaman home setelah login berhasil
+  // Tambahkan di App/_app.tsx untuk handle session
+useEffect(() => {
+  const syncSession = () => {
+    const token = sessionStorage.getItem('userToken');
+    if (!token) {
+      router.push('/login');
     }
   };
+  window.addEventListener('storage', syncSession);
+  return () => window.removeEventListener('storage', syncSession);
+}, []);
 
-  // Komponen Modal langsung di dalam login.tsx
+const handleCloseModal = () => {
+  setShowModal(false);
+  if (modalMessage === 'Login successful!') {
+    router.push('/home'); // atau: router.reload()
+  }
+};
+
+
   const Modal = ({ message, onClose }: { message: string; onClose: () => void }) => (
     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-white rounded-lg p-6 max-w-sm w-full">
@@ -110,7 +123,7 @@ const Login = () => {
         </p>
       </div>
 
-      {showModal && <Modal message={modalMessage} onClose={handleCloseModal} />} {/* Tampilkan modal */}
+      {showModal && <Modal message={modalMessage} onClose={handleCloseModal} />}
     </div>
   );
 };

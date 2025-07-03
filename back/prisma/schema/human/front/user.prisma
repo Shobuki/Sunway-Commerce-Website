@@ -1,0 +1,53 @@
+model User {
+  Id                     Int                         @id @default(autoincrement())
+  Email                  String                      @db.VarChar(75)
+  Name                   String?                     @db.VarChar(50)
+  Password               String                      @db.VarChar(100)
+  Username               String                      @db.VarChar(30)
+  CreatedAt              DateTime                    @default(now())
+  DeletedAt              DateTime?
+  Token                  String?                     @db.VarChar(300)
+  Image                  String?                     @db.VarChar(255)
+  Address                String?                     @db.VarChar(150)
+  Birthdate              DateTime?
+  Country                String?                     @db.VarChar(30)
+  Gender                 String?                     @db.VarChar(10)
+  PhoneNumber            String?                     @db.VarChar(20)
+  Province               String?                     @db.VarChar(30)
+  DealerId               Int?
+  Cart                   Cart?
+  SalesOrders            SalesOrder[]
+  Dealer                 Dealer?                     @relation("UserDealers", fields: [DealerId], references: [Id])
+  ForgotPasswordRequests UserForgotPasswordRequest[]
+  UserSession            UserSession[]
+
+  @@schema("public")
+}
+
+model UserSession {
+  Id         Int      @id @default(autoincrement())
+  UserId     Int
+  LoginTime  DateTime @default(now())
+  LogoutTime DateTime?
+  Token      String?  @db.VarChar(300)  
+  User       User     @relation(fields: [UserId], references: [Id])
+
+  @@schema("public")
+}
+
+model UserForgotPasswordRequest {
+  Id              Int            @id @default(autoincrement())
+  UserId          Int
+  Token           String         @unique @db.VarChar(100)     
+  IsUsed          Boolean        @default(false)
+  ExpiresAt       DateTime
+  SenderEmail     String?        @db.VarChar(75)            
+  Status          EmailStatus    @default(PENDING)
+  ErrorMessage    String?        @db.VarChar(255)            
+  CreatedAt       DateTime       @default(now())
+  EmailTemplateId Int?
+  EmailTemplate   EmailTemplate? @relation(fields: [EmailTemplateId], references: [Id])
+  User            User           @relation(fields: [UserId], references: [Id])
+
+  @@schema("public")
+}

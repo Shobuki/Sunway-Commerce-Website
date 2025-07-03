@@ -1,0 +1,23 @@
+model Cart {
+  Id        Int        @id @default(autoincrement())
+  UserId    Int        @unique
+  CreatedAt DateTime   @default(now())
+  DeletedAt DateTime?
+  User      User       @relation(fields: [UserId], references: [Id])
+  CartItems CartItem[]
+
+  @@schema("public")
+}
+
+model CartItem {
+  Id         Int       @id @default(autoincrement())
+  CartId     Int
+  ItemCodeId Int
+  Quantity   Int
+  CreatedAt  DateTime  @default(now())
+  DeletedAt  DateTime?
+  Cart       Cart      @relation(fields: [CartId], references: [Id])
+  ItemCode   ItemCode  @relation(fields: [ItemCodeId], references: [Id])
+
+  @@schema("public")
+}

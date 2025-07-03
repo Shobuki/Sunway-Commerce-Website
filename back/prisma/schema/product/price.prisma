@@ -1,0 +1,49 @@
+model Price {
+  Id              Int              @id @default(autoincrement())
+  Price           Float
+  PriceCategoryId Int?
+  DealerId        Int?
+  CreatedAt       DateTime         @default(now())
+  DeletedAt       DateTime?
+  ItemCodeId      Int
+  Dealer          Dealer?          @relation(fields: [DealerId], references: [Id])
+  ItemCode        ItemCode         @relation(fields: [ItemCodeId], references: [Id])
+  PriceCategory   PriceCategory?   @relation(fields: [PriceCategoryId], references: [Id])
+  WholesalePrices WholesalePrice[]
+
+  @@schema("public")
+}
+
+model PriceCategory {
+  Id               Int                @id @default(autoincrement())
+  Name             String
+  CreatedAt        DateTime           @default(now())
+  DeletedAt        DateTime?
+  Dealer           Dealer[]
+  Price            Price[]
+  SalesOrderDetail SalesOrderDetail[]
+
+  @@schema("public")
+}
+
+model WholesalePrice {
+  Id          Int       @id @default(autoincrement())
+  MinQuantity Int
+  MaxQuantity Int
+  PriceId     Int
+  CreatedAt   DateTime  @default(now())
+  DeletedAt   DateTime?
+  Price       Price     @relation(fields: [PriceId], references: [Id])
+
+  @@schema("public")
+}
+
+model PriceHistory {
+  Id         Int      @id @default(autoincrement())
+  Price      Float
+  UpdatedAt  DateTime @default(now())
+  ItemCodeId Int
+  ItemCode   ItemCode @relation(fields: [ItemCodeId], references: [Id])
+
+  @@schema("public")
+}

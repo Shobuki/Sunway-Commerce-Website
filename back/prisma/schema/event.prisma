@@ -1,0 +1,23 @@
+model Event {
+  id          Int          @id @default(autoincrement())
+  name        String
+  dateStart   DateTime
+  dateEnd     DateTime?
+  createdAt   DateTime     @default(now())
+  deletedAt   DateTime?
+  description String?
+  EventImage  EventImage[]
+
+  @@schema("public")
+}
+
+model EventImage {
+  id        Int       @id @default(autoincrement())
+  image     String
+  eventId   Int
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+  Event     Event     @relation(fields: [eventId], references: [id])
+
+  @@schema("public")
+}

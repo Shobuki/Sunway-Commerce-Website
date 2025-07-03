@@ -19,3 +19,31 @@ body {
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+
+
+.report-container {
+  margin-left: 220px; /* menyesuaikan lebar sidebar + jarak */
+  padding: 24px;
+}
+
+.ql-editor strong {
+  font-weight: 800; /* Lebih tebal dari default */
+  color: #1a202c;    /* Warna teks lebih gelap */
+}
+
+.ql-editor em {
+  font-style: italic;
+  color: #4a5568; /* Warna lebih abu untuk italic */
+}
+
+.ql-editor u {
+  text-decoration: underline;
+  color: #2b6cb0; /* Biru agar underline lebih terlihat */
+}
+
+.ql-editor p {
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+  font-size: 0.95rem;
+}

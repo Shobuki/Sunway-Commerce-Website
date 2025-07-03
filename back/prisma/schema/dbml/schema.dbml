@@ -1,0 +1,686 @@
+//// ------------------------------------------------------
+//// THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+//// ------------------------------------------------------
+
+Table Event {
+  id Int [pk, increment]
+  name String [not null]
+  dateStart DateTime [not null]
+  dateEnd DateTime
+  createdAt DateTime [default: `now()`, not null]
+  deletedAt DateTime
+  description String
+  EventImage EventImage [not null]
+}
+
+Table EventImage {
+  id Int [pk, increment]
+  image String [not null]
+  eventId Int [not null]
+  createdAt DateTime [default: `now()`, not null]
+  deletedAt DateTime
+  Event Event [not null]
+}
+
+Table Admin {
+  Id Int [pk, increment]
+  Username String [not null]
+  Password String [not null]
+  Email String [not null]
+  Token String
+  Image String
+  Name String
+  Birthdate DateTime
+  PhoneNumber String
+  Address String
+  Gender String
+  RoleId Int [not null]
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  AdminRole AdminRole [not null]
+  ForgotPasswordRequests AdminForgotPasswordRequest [not null]
+  AdminSession AdminSession [not null]
+  Sales Sales
+  StockHistory StockHistory [not null]
+}
+
+Table AdminSession {
+  Id Int [pk, increment]
+  AdminId Int [not null]
+  LoginTime DateTime [default: `now()`, not null]
+  LogoutTime DateTime
+  Device String
+  UserAgent String
+  Admin Admin [not null]
+}
+
+Table AdminForgotPasswordRequest {
+  Id Int [pk, increment]
+  AdminId Int [not null]
+  Token String [unique, not null]
+  IsUsed Boolean [not null, default: false]
+  ExpiresAt DateTime [not null]
+  SenderEmail String
+  Status EmailStatus [not null, default: 'PENDING']
+  ErrorMessage String
+  CreatedAt DateTime [default: `now()`, not null]
+  EmailTemplateId Int
+  Admin Admin [not null]
+  EmailTemplate EmailTemplate
+}
+
+Table Sales {
+  Id Int [pk, increment]
+  AdminId Int [unique, not null]
+  EmailRecipients EmailSalesOrderRecipient [not null]
+  Admin Admin [not null]
+  SalesOrders SalesOrder [not null]
+  Dealers Dealer [not null]
+}
+
+Table Dealer {
+  Id Int [pk, increment]
+  CompanyName String [not null]
+  Region String
+  StoreCode String [not null]
+  Address String
+  PhoneNumber String
+  fax String
+  PriceCategoryId Int
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  PriceCategory PriceCategory
+  DealerWarehouse DealerWarehouse [not null]
+  Price Price [not null]
+  SalesOrders SalesOrder [not null]
+  User User [not null]
+  Sales Sales [not null]
+}
+
+Table User {
+  Id Int [pk, increment]
+  Email String [not null]
+  Name String
+  Password String [not null]
+  Username String [not null]
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  Token String
+  Image String
+  Address String
+  Birthdate DateTime
+  Country String
+  Gender String
+  PhoneNumber String
+  Province String
+  DealerId Int
+  Cart Cart
+  SalesOrders SalesOrder [not null]
+  Dealer Dealer
+  ForgotPasswordRequests UserForgotPasswordRequest [not null]
+  UserSession UserSession [not null]
+}
+
+Table UserSession {
+  Id Int [pk, increment]
+  UserId Int [not null]
+  LoginTime DateTime [default: `now()`, not null]
+  LogoutTime DateTime
+  Token String
+  User User [not null]
+}
+
+Table UserForgotPasswordRequest {
+  Id Int [pk, increment]
+  UserId Int [not null]
+  Token String [unique, not null]
+  IsUsed Boolean [not null, default: false]
+  ExpiresAt DateTime [not null]
+  SenderEmail String
+  Status EmailStatus [not null, default: 'PENDING']
+  ErrorMessage String
+  CreatedAt DateTime [default: `now()`, not null]
+  EmailTemplateId Int
+  EmailTemplate EmailTemplate
+  User User [not null]
+}
+
+Table AdminRole {
+  Id Int [pk, increment]
+  Name String [not null]
+  Description String
+  Admin Admin [not null]
+  RoleAccess RoleMenuAccess [not null]
+  RoleFeatureAccess RoleMenuFeatureAccess [not null]
+}
+
+Table Menu {
+  Id Int [pk, increment]
+  Name String [not null]
+  Path String [not null]
+  Description String
+  MenuFeatures MenuFeature [not null]
+  RoleAccess RoleMenuAccess [not null]
+}
+
+Table MenuFeature {
+  Id Int [pk, increment]
+  MenuId Int [not null]
+  Feature String [not null]
+  Menu Menu [not null]
+  RoleFeatureAccess RoleMenuFeatureAccess [not null]
+
+  indexes {
+    (MenuId, Feature) [unique]
+  }
+}
+
+Table RoleMenuAccess {
+  Id Int [pk, increment]
+  RoleId Int [not null]
+  MenuId Int [not null]
+  Access AccessLevel [not null]
+  Menu Menu [not null]
+  AdminRole AdminRole [not null]
+
+  indexes {
+    (RoleId, MenuId) [unique]
+  }
+}
+
+Table RoleMenuFeatureAccess {
+  Id Int [pk, increment]
+  RoleId Int [not null]
+  MenuFeatureId Int [not null]
+  Access AccessLevel [not null]
+  MenuFeature MenuFeature [not null]
+  AdminRole AdminRole [not null]
+
+  indexes {
+    (RoleId, MenuFeatureId) [unique]
+  }
+}
+
+Table Cart {
+  Id Int [pk, increment]
+  UserId Int [unique, not null]
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  User User [not null]
+  CartItems CartItem [not null]
+}
+
+Table CartItem {
+  Id Int [pk, increment]
+  CartId Int [not null]
+  ItemCodeId Int [not null]
+  Quantity Int [not null]
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  Cart Cart [not null]
+  ItemCode ItemCode [not null]
+}
+
+Table Price {
+  Id Int [pk, increment]
+  Price Float [not null]
+  PriceCategoryId Int
+  DealerId Int
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  ItemCodeId Int [not null]
+  Dealer Dealer
+  ItemCode ItemCode [not null]
+  PriceCategory PriceCategory
+  WholesalePrices WholesalePrice [not null]
+}
+
+Table PriceCategory {
+  Id Int [pk, increment]
+  Name String [not null]
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  Dealer Dealer [not null]
+  Price Price [not null]
+  SalesOrderDetail SalesOrderDetail [not null]
+}
+
+Table WholesalePrice {
+  Id Int [pk, increment]
+  MinQuantity Int [not null]
+  MaxQuantity Int [not null]
+  PriceId Int [not null]
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  Price Price [not null]
+}
+
+Table PriceHistory {
+  Id Int [pk, increment]
+  Price Float [not null]
+  UpdatedAt DateTime [default: `now()`, not null]
+  ItemCodeId Int [not null]
+  ItemCode ItemCode [not null]
+}
+
+Table Product {
+  Id Int [pk, increment]
+  Name String [not null]
+  CodeName String
+  Description String
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  PartNumber PartNumber [not null]
+  ProductImage ProductImage [not null]
+  ProductCategory ProductCategory [not null]
+}
+
+Table PartNumber {
+  Id Int [pk, increment]
+  Name String [not null]
+  Description String
+  Dash Int
+  InnerDiameter Float
+  OuterDiameter Float
+  WorkingPressure Float
+  BurstingPressure Float
+  BendingRadius Float
+  HoseWeight Float
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  ProductId Int
+  ItemCode ItemCode [not null]
+  Product Product
+}
+
+Table ItemCode {
+  Id Int [pk, increment]
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  Name String [not null]
+  BrandCodeId Int
+  OEM String
+  Weight Float
+  AllowItemCodeSelection Boolean [not null, default: false]
+  MinOrderQuantity Int
+  QtyPO Float
+  OrderStep Int
+  PartNumberId Int
+  CartItem CartItem [not null]
+  ProductBrand ProductBrand
+  PartNumber PartNumber
+  ItemCodeImage ItemCodeImage [not null]
+  Price Price [not null]
+  PriceHistory PriceHistory [not null]
+  SalesOrderDetail SalesOrderDetail [not null]
+  StockHistories StockHistory [not null]
+  WarehouseStocks WarehouseStock [not null]
+}
+
+Table ItemCodeImage {
+  Id Int [pk, increment]
+  Image String
+  ItemCodeId Int [not null]
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  ItemCode ItemCode [not null]
+}
+
+Table Warehouse {
+  Id Int [pk, increment]
+  Name String
+  BusinessUnit String [not null]
+  Location String
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  DealerWarehouse DealerWarehouse [not null]
+  SalesOrderDetails SalesOrderDetail [not null]
+  Stocks WarehouseStock [not null]
+}
+
+Table WarehouseStock {
+  Id Int [pk, increment]
+  WarehouseId Int [not null]
+  ItemCodeId Int [not null]
+  QtyOnHand Float [not null, default: 0]
+  UpdatedAt DateTime [default: `now()`, not null]
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  StockHistories StockHistory [not null]
+  ItemCode ItemCode [not null]
+  Warehouse Warehouse [not null]
+
+  indexes {
+    (WarehouseId, ItemCodeId) [unique]
+  }
+}
+
+Table DealerWarehouse {
+  Id Int [pk, increment]
+  DealerId Int [not null]
+  WarehouseId Int [not null]
+  Priority Int
+  Dealer Dealer [not null]
+  Warehouse Warehouse [not null]
+
+  indexes {
+    (DealerId, WarehouseId) [unique]
+  }
+}
+
+Table ProductBrand {
+  Id Int [pk, increment]
+  ProductBrandName String
+  ProductBrandCode String
+  ItemCode ItemCode [not null]
+}
+
+Table ProductImage {
+  Id Int [pk, increment]
+  Image String
+  ProductId Int [not null]
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  Product Product [not null]
+}
+
+Table ProductCategory {
+  Id Int [pk, increment]
+  Name String [not null]
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  ParentCategoryId Int
+  ParentCategory ProductCategory
+  SubCategories ProductCategory [not null]
+  ProductCategoryImage ProductCategoryImage [not null]
+  Products Product [not null]
+}
+
+Table ProductCategoryImage {
+  Id Int [pk, increment]
+  Image String
+  ProductCategoryId Int [not null]
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  ProductCategory ProductCategory [not null]
+}
+
+Table StockHistory {
+  Id Int [pk, increment]
+  WarehouseStockId Int
+  ItemCodeId Int [not null]
+  QtyBefore Float
+  QtyAfter Float
+  Note String
+  UpdatedAt DateTime [default: `now()`, not null]
+  UploadLogId Int
+  AdminId Int
+  Admin Admin
+  ItemCode ItemCode [not null]
+  UploadLog StockHistoryExcelUploadLog
+  WarehouseStock WarehouseStock
+}
+
+Table StockHistoryExcelUploadLog {
+  Id Int [pk, increment]
+  FilePath String [not null]
+  CreatedAt DateTime [default: `now()`, not null]
+  Histories StockHistory [not null]
+}
+
+Table SalesOrder {
+  Id Int [pk, increment]
+  SalesOrderNumber String
+  JdeSalesOrderNumber String
+  DealerId Int [not null]
+  UserId Int [not null]
+  SalesId Int [not null]
+  Status SalesOrderStatus [not null, default: 'PENDING_APPROVAL']
+  Note String
+  PaymentTerm Int
+  FOB String
+  CustomerPoNumber String
+  DeliveryOrderNumber String
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  TransactionToken String [not null]
+  EmailSalesOrders EmailSalesOrder [not null]
+  Dealer Dealer [not null]
+  Sales Sales [not null]
+  User User [not null]
+  SalesOrderDetails SalesOrderDetail [not null]
+  SalesOrderFile SalesOrderFile
+}
+
+Table SalesOrderDetail {
+  Id Int [pk, increment]
+  SalesOrderId Int [not null]
+  ItemCodeId Int [not null]
+  WarehouseId Int
+  Quantity Int [not null]
+  Price Float [not null]
+  FinalPrice Float [not null]
+  PriceCategoryId Int
+  FulfillmentStatus FulfillmentStatus [not null, default: 'READY']
+  TaxId Int
+  ItemCode ItemCode [not null]
+  PriceCategory PriceCategory
+  SalesOrder SalesOrder [not null]
+  Tax Tax
+  Warehouse Warehouse
+}
+
+Table Tax {
+  Id Int [pk, increment]
+  Name String
+  Percentage Float [not null]
+  IsActive Boolean [not null, default: true]
+  CreatedAt DateTime [default: `now()`, not null]
+  UpdatedAt DateTime
+  DeletedAt DateTime
+  SalesOrderDetails SalesOrderDetail [not null]
+}
+
+Table SalesOrderFile {
+  Id Int [pk, increment]
+  SalesOrderId Int [unique, not null]
+  ExcelFile String
+  PdfFile String
+  CreatedAt DateTime [default: `now()`, not null]
+  UpdatedAt DateTime
+  SalesOrder SalesOrder [not null]
+}
+
+Table EmailSalesOrder {
+  Id Int [pk, increment]
+  SalesOrderId Int [not null]
+  SenderEmail String
+  RecipientEmail String [not null]
+  Subject String [not null]
+  Body String
+  Status EmailStatus [not null, default: 'PENDING']
+  CreatedAt DateTime [default: `now()`, not null]
+  UpdatedAt DateTime
+  DeletedAt DateTime
+  ApprovedAt DateTime
+  EmailTemplateId Int
+  EmailTemplate EmailTemplate
+  SalesOrder SalesOrder [not null]
+}
+
+Table EmailSalesOrderRecipient {
+  Id Int [pk, increment]
+  SalesId Int [not null]
+  RecipientEmail String [not null]
+  CreatedAt DateTime [default: `now()`, not null]
+  DeletedAt DateTime
+  Sales Sales [not null]
+}
+
+Table EmailConfig {
+  Id Int [pk, increment]
+  Email String [unique, not null]
+  Password String [not null]
+  Host String [not null, default: 'smtp.gmail.com']
+  Port Int [not null, default: 465]
+  Secure Boolean [not null, default: true]
+  IsActive Boolean [not null, default: true]
+  CreatedAt DateTime [default: `now()`, not null]
+  UpdatedAt DateTime
+  DeletedAt DateTime
+}
+
+Table EmailTemplate {
+  Id Int [pk, increment]
+  Name String [not null]
+  Subject String
+  Body String
+  CreatedAt DateTime [default: `now()`, not null]
+  TemplateType EmailTemplateType
+  UpdatedAt DateTime
+  DeletedAt DateTime
+  UsedInAdminForgotPassword AdminForgotPasswordRequest [not null]
+  UsedInSalesOrders EmailSalesOrder [not null]
+  UsedInUserForgotPassword UserForgotPasswordRequest [not null]
+}
+
+Table DealerSales {
+  dealersId Int [ref: > Dealer.Id]
+  salesId Int [ref: > Sales.Id]
+}
+
+Table ProductToProductCategory {
+  productcategoryId Int [ref: > ProductCategory.Id]
+  productsId Int [ref: > Product.Id]
+}
+
+Enum AccessLevel {
+  NONE
+  WRITE
+}
+
+Enum SalesOrderStatus {
+  PENDING_APPROVAL
+  APPROVED_EMAIL_SENT
+  NEEDS_REVISION
+  REJECTED
+}
+
+Enum FulfillmentStatus {
+  READY
+  IN_PO
+}
+
+Enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+Enum EmailTemplateType {
+  SALES_ORDER
+  FORGOT_PASSWORD_USER
+  FORGOT_PASSWORD_ADMIN
+}
+
+Ref: EventImage.eventId > Event.id
+
+Ref: Admin.RoleId > AdminRole.Id
+
+Ref: AdminSession.AdminId > Admin.Id
+
+Ref: AdminForgotPasswordRequest.AdminId > Admin.Id
+
+Ref: AdminForgotPasswordRequest.EmailTemplateId > EmailTemplate.Id
+
+Ref: Sales.AdminId - Admin.Id
+
+Ref: Dealer.PriceCategoryId > PriceCategory.Id
+
+Ref: User.DealerId > Dealer.Id
+
+Ref: UserSession.UserId > User.Id
+
+Ref: UserForgotPasswordRequest.EmailTemplateId > EmailTemplate.Id
+
+Ref: UserForgotPasswordRequest.UserId > User.Id
+
+Ref: MenuFeature.MenuId > Menu.Id
+
+Ref: RoleMenuAccess.MenuId > Menu.Id
+
+Ref: RoleMenuAccess.RoleId > AdminRole.Id
+
+Ref: RoleMenuFeatureAccess.MenuFeatureId > MenuFeature.Id
+
+Ref: RoleMenuFeatureAccess.RoleId > AdminRole.Id
+
+Ref: Cart.UserId - User.Id
+
+Ref: CartItem.CartId > Cart.Id
+
+Ref: CartItem.ItemCodeId > ItemCode.Id
+
+Ref: Price.DealerId > Dealer.Id
+
+Ref: Price.ItemCodeId > ItemCode.Id
+
+Ref: Price.PriceCategoryId > PriceCategory.Id
+
+Ref: WholesalePrice.PriceId > Price.Id
+
+Ref: PriceHistory.ItemCodeId > ItemCode.Id
+
+Ref: PartNumber.ProductId > Product.Id
+
+Ref: ItemCode.BrandCodeId > ProductBrand.Id
+
+Ref: ItemCode.PartNumberId > PartNumber.Id
+
+Ref: ItemCodeImage.ItemCodeId > ItemCode.Id
+
+Ref: WarehouseStock.ItemCodeId > ItemCode.Id
+
+Ref: WarehouseStock.WarehouseId > Warehouse.Id
+
+Ref: DealerWarehouse.DealerId > Dealer.Id
+
+Ref: DealerWarehouse.WarehouseId > Warehouse.Id
+
+Ref: ProductImage.ProductId > Product.Id
+
+Ref: ProductCategory.ParentCategoryId - ProductCategory.Id
+
+Ref: ProductCategoryImage.ProductCategoryId > ProductCategory.Id
+
+Ref: StockHistory.AdminId > Admin.Id
+
+Ref: StockHistory.ItemCodeId > ItemCode.Id
+
+Ref: StockHistory.UploadLogId > StockHistoryExcelUploadLog.Id
+
+Ref: StockHistory.WarehouseStockId > WarehouseStock.Id
+
+Ref: SalesOrder.DealerId > Dealer.Id
+
+Ref: SalesOrder.SalesId > Sales.Id
+
+Ref: SalesOrder.UserId > User.Id
+
+Ref: SalesOrderDetail.ItemCodeId > ItemCode.Id
+
+Ref: SalesOrderDetail.PriceCategoryId > PriceCategory.Id
+
+Ref: SalesOrderDetail.SalesOrderId > SalesOrder.Id
+
+Ref: SalesOrderDetail.TaxId > Tax.Id
+
+Ref: SalesOrderDetail.WarehouseId > Warehouse.Id
+
+Ref: SalesOrderFile.SalesOrderId - SalesOrder.Id
+
+Ref: EmailSalesOrder.EmailTemplateId > EmailTemplate.Id
+
+Ref: EmailSalesOrder.SalesOrderId > SalesOrder.Id
+
+Ref: EmailSalesOrderRecipient.SalesId > Sales.Id

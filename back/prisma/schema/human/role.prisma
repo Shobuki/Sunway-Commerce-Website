@@ -1,0 +1,63 @@
+model AdminRole {
+  Id                Int                     @id @default(autoincrement())
+  Name              String                  @db.VarChar(30)
+  Description       String?                 @db.VarChar(100)
+  Admin             Admin[]
+  RoleAccess        RoleMenuAccess[]
+  RoleFeatureAccess RoleMenuFeatureAccess[]
+
+  @@schema("public")
+}
+
+model Menu {
+  Id           Int              @id @default(autoincrement())
+  Name         String           @db.VarChar(50)
+  Path         String           @db.VarChar(100)
+  Description  String?          @db.VarChar(100)
+  MenuFeatures MenuFeature[]
+  RoleAccess   RoleMenuAccess[]
+
+  @@schema("public")
+}
+
+model MenuFeature {
+  Id                Int                     @id @default(autoincrement())
+  MenuId            Int
+  Feature           String                  @db.VarChar(80)
+  Menu              Menu                    @relation(fields: [MenuId], references: [Id])
+  RoleFeatureAccess RoleMenuFeatureAccess[]
+
+  @@unique([MenuId, Feature])
+  @@schema("public")
+}
+
+model RoleMenuAccess {
+  Id        Int         @id @default(autoincrement())
+  RoleId    Int
+  MenuId    Int
+  Access    AccessLevel
+  Menu      Menu        @relation(fields: [MenuId], references: [Id])
+  AdminRole AdminRole   @relation(fields: [RoleId], references: [Id])
+
+  @@unique([RoleId, MenuId])
+  @@schema("public")
+}
+
+model RoleMenuFeatureAccess {
+  Id            Int         @id @default(autoincrement())
+  RoleId        Int
+  MenuFeatureId Int
+  Access        AccessLevel
+  MenuFeature   MenuFeature @relation(fields: [MenuFeatureId], references: [Id])
+  AdminRole     AdminRole   @relation(fields: [RoleId], references: [Id])
+
+  @@unique([RoleId, MenuFeatureId])
+  @@schema("public")
+}
+
+enum AccessLevel {
+  NONE
+  WRITE
+
+  @@schema("public")
+}

@@ -1,3 +1,20 @@
 {
-  "extends": ["next/core-web-vitals", "next/typescript"]
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "rules": {
+    "no-restricted-globals": [
+      "error",
+      {
+        "name": "localStorage",
+        "message": "Akses localStorage hanya boleh di dalam useEffect/client component!"
+      },
+      {
+        "name": "window",
+        "message": "Akses window hanya boleh di dalam useEffect/client component!"
+      },
+      {
+        "name": "sessionStorage",
+        "message": "Akses sessionStorage hanya boleh di dalam useEffect/client component!"
+      }
+    ]
+  }
 }

@@ -1,0 +1,68 @@
+/* C:\xampp\htdocs\sunway\sunway-stok\frontdealer\src\pages\ourservice.css */
+
+body {
+  background-image: url("/images/Grey-bg.jpg");
+}
+
+.rainbow--red {
+  color: red; /* Or a specific red hex code */
+}
+
+.text--rainbow {
+  color: red; /* Or a specific red hex code for text */
+}
+
+.text--rainbow.active {
+  font-weight: bold;
+  /* Add any other active styles */
+}
+
+.navbar-sunway {
+  background-color: #f8f8f8; /* Example background */
+  border-color: #e7e7e7; /* Example border */
+}
+
+.navbar-brand--logo img {
+  height: 30px; /* Adjust as needed */
+}
+
+.mobilesidebar__nav ul {
+  list-style: none;
+  padding: 0;
+}
+
+.mobilesidebar__nav li h3 a {
+  display: block;
+  padding: 8px 15px;
+  text-decoration: none;
+  color: #333;
+}
+
+.mobilesidebar__nav li h3 a:hover {
+  background-color: #eee;
+}
+
+.panel {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.panel-heading {
+  padding: 10px 15px;
+  border-bottom: 1px solid #ddd;
+  border-top-left-radius: 3px;
+  border-top-right-radius: 3px;
+  background-color: #f5f5f5;
+}
+
+.panel-body {
+  padding: 15px;
+}
+
+.img-responsive {
+  max-width: 100%;
+  height: auto;
+  display: block; /* To remove extra space below image if any */
+}
+/* Add more styles as needed from your main.css */
