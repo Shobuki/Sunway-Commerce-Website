@@ -26,7 +26,6 @@ const ItemCodeEditModal = ({ isOpen, onClose, onSave, Id }) => {
   useEffect(() => {
     if (isOpen && Id) {
       fetchAllData();
-      fetchItemCodeImages();
     }
     // eslint-disable-next-line
   }, [isOpen, Id]);
@@ -95,27 +94,7 @@ const ItemCodeEditModal = ({ isOpen, onClose, onSave, Id }) => {
   }
 };
 
-  const fetchItemCodeImages = async () => {
-    if (!Id) return;
-    try {
-      const response = await axios.get(`/api/admin/admin/products/item-codes/images/${Id}`);
-      if (response.data?.data?.length > 0) {
-        setImages(response.data.data.map((img) => ({
-          Id: img.Id,
-          ImageUrl: `/${img.ImageUrl}`,
-          CreatedAt: img.CreatedAt,
-        })));
-      } else {
-        setImages([]);
-      }
-    } catch (error) {
-      if (error.response && error.response.status === 404) {
-        setImages([]);
-      } else {
-        console.error("Error fetching item code images:", error);
-      }
-    }
-  };
+  
 
   // Update part number name ketika data partNumbers berubah
   useEffect(() => {
@@ -140,27 +119,7 @@ const ItemCodeEditModal = ({ isOpen, onClose, onSave, Id }) => {
     }));
   };
 
-  // Image Upload
-  const handleUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
 
-    const uploadForm = new FormData();
-    uploadForm.append("ItemCodeId", Id);
-    uploadForm.append("image", file);
-
-    try {
-      setUploading(true);
-      await axios.post("/api/admin/admin/products/item-codes/images", uploadForm, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      fetchItemCodeImages();
-    } catch (error) {
-      console.error("Error uploading image:", error);
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const handleDelete = async (imageId) => {
     try {
@@ -224,23 +183,6 @@ const ItemCodeEditModal = ({ isOpen, onClose, onSave, Id }) => {
               className="border p-2 w-full rounded"
             />
             {errors.Name && <p className="text-red-500 text-sm">{errors.Name}</p>}
-          </div>
-          <div>
-            <label className="block font-medium">Brand</label>
-            <select
-              name="BrandCodeId"
-              value={formData.BrandCodeId}
-              onChange={handleInputChange}
-              className="border p-2 w-full rounded"
-            >
-              <option value="">Select Brand</option>
-              {brands.map((brand) => (
-                <option key={brand.Id} value={brand.Id}>
-                  {brand.DisplayName}
-                </option>
-              ))}
-            </select>
-            {errors.BrandCodeId && <p className="text-red-500 text-sm">{errors.BrandCodeId}</p>}
           </div>
           <div>
             <label className="block font-medium">OEM</label>
@@ -350,35 +292,7 @@ const ItemCodeEditModal = ({ isOpen, onClose, onSave, Id }) => {
           {errors.PartNumberId && <p className="text-red-500 text-sm">{errors.PartNumberId}</p>}
         </div>
 
-        {/* Upload Images */}
-        <div className="mt-4">
-          <label className="block font-medium">Upload Item Code Image</label>
-          <input type="file" className="border p-2 w-full rounded" onChange={handleUpload} disabled={uploading} />
-        </div>
-        <div className="mt-4">
-          <h3 className="font-bold">Uploaded Images:</h3>
-          {images.length > 0 ? (
-            <div className="grid grid-cols-3 gap-4">
-              {images.map((image) => (
-                <div key={image.Id} className="relative group">
-                  <img
-                    src={image.ImageUrl}
-                    alt="Item Code"
-                    className="w-full h-32 object-contain rounded-md shadow-md"
-                  />
-                  <button
-                    onClick={() => handleDelete(image.Id)}
-                    className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 text-sm rounded-md opacity-0 group-hover:opacity-100 transition"
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500">No images available.</p>
-          )}
-        </div>
+
         <div className="mt-6 flex justify-end gap-4">
           <button onClick={onClose} className="bg-gray-500 text-white px-4 py-2 rounded">Cancel</button>
           <button onClick={handleSubmit} className="bg-blue-500 text-white px-4 py-2 rounded" disabled={isLoading}>

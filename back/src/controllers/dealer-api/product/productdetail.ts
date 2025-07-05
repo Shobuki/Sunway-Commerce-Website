@@ -3,6 +3,48 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+
+const resolvePrice2 = (
+  prices: any[],
+  dealerId: any,
+  priceCategoryId: any
+) => {
+  // Cari dealer specific (priority)
+  const dealerSpecific = prices.find(
+    p =>
+      p.DealerId === dealerId &&
+      p.PriceCategoryId == null &&
+      (!p.WholesalePrices || p.WholesalePrices.length === 0)
+  );
+  // Cari price category (priority kedua)
+  const byCategory = prices.find(
+    p =>
+      p.DealerId == null &&
+      p.PriceCategoryId === priceCategoryId &&
+      (!p.WholesalePrices || p.WholesalePrices.length === 0)
+  );
+  // Cari wholesale price jika ada
+  for (const p of prices) {
+    if (p.WholesalePrices?.length) {
+      // Ambil semua wholesaleprice valid
+      const grosir = p.WholesalePrices[0];
+      return {
+        NormalPrice: dealerSpecific?.Price || byCategory?.Price || 0,
+        WholesalePrice: grosir.Price.Price,
+        MinQtyWholesale: grosir.MinQuantity,
+        MaxQtyWholesale: grosir.MaxQuantity,
+      };
+    }
+  }
+  // Kalau tidak ada grosir, tetap return normal
+  return {
+    NormalPrice: dealerSpecific?.Price || byCategory?.Price || 0,
+    WholesalePrice: null,
+    MinQtyWholesale: null,
+    MaxQtyWholesale: null,
+  };
+};
+
 // ✅ Fetch Product Detail by ID (Include Product Images and Part Numbers)
 export const getProductDetail = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -208,9 +250,9 @@ export const fetchPartNumberFromProduct = async (req: Request, res: Response): P
                 PriceCategoryId: true,
                 WholesalePrices: {
                   select: {
-                    Price: {
-                      select: { Price: true }
-                    }
+                    Price: { select: { Price: true } },
+                    MinQuantity: true,
+                    MaxQuantity: true
                   }
                 }
               },
@@ -273,76 +315,85 @@ export const fetchPartNumberFromProduct = async (req: Request, res: Response): P
 
     const result: any[] = [];
 
-withDefaults.forEach(part => {
-  const allItemCodes = part.ItemCode;
+    withDefaults.forEach(part => {
+      const allItemCodes = part.ItemCode;
+      const itemCodeTrue = allItemCodes.filter(ic => ic.AllowItemCodeSelection);
+      const itemCodeFalse = allItemCodes.filter(ic => !ic.AllowItemCodeSelection);
 
-  // Split itemcode by allow selection
-  const itemCodeTrue = allItemCodes.filter(ic => ic.AllowItemCodeSelection);
-  const itemCodeFalse = allItemCodes.filter(ic => !ic.AllowItemCodeSelection);
+      // --- 1. Jika ADA itemCodeTrue, tampilkan itemcode true satu per satu ---
+      for (const ic of itemCodeTrue) {
+        // >>>> DI SINI <<<<
+        // Ganti dari resolvePrice(ic.Price) menjadi resolvePrice2(ic.Price, dealerId, priceCategoryId)
+        const resolved = resolvePrice2(ic.Price, dealerId, priceCategoryId);
+        result.push({
+          IdPartNumber: part.Id,
+          Name: ic.Name,
+          AllowItemCodeSelection: true,
+          IdItemCode: ic.Id,
+          PriceResolved: resolved.NormalPrice ?? 0,
+          NormalPrice: resolved.NormalPrice ?? 0,
+          WholesalePrice: resolved.WholesalePrice ?? null,
+          MinQtyWholesale: resolved.MinQtyWholesale ?? null,
+          MaxQtyWholesale: resolved.MaxQtyWholesale ?? null,
+          MinOrderQuantity: ic.MinOrderQuantity,
+          OrderStep: ic.OrderStep,
+          IsWholesalePrice: resolvePrice(ic.Price).isWholesale,
+          StockResolved: (ic.WarehouseStocks || []).map(ws => ({
+            warehouse: ws.Warehouse?.Name ?? 'Unknown',
+            qty: ws.QtyOnHand ?? 0
+          }))
+        });
+      }
 
-  // --- 1. Jika ADA itemCodeTrue, tampilkan itemcode true satu per satu ---
-  for (const ic of itemCodeTrue) {
-    result.push({
-      IdPartNumber: part.Id,
-      Name: ic.Name,
-      AllowItemCodeSelection: true,
-      IdItemCode: ic.Id,
-      PriceResolved: resolvePrice(ic.Price).price ?? 0,
-      MinOrderQuantity: ic.MinOrderQuantity,
-      OrderStep: ic.OrderStep,
-      IsWholesalePrice: resolvePrice(ic.Price).isWholesale,
-      StockResolved: (ic.WarehouseStocks || []).map(ws => ({
-        warehouse: ws.Warehouse?.Name ?? 'Unknown',
-        qty: ws.QtyOnHand ?? 0
-      }))
+      // --- 2. Jika ADA itemCodeFalse, gabungkan/jadikan satu partnumber untuk semua itemcode false (akumulasi warehouse) ---
+      if (itemCodeFalse.length > 0) {
+        // Akumulasi stok per warehouse
+        const stockMap: { [warehouse: string]: number } = {};
+        itemCodeFalse.forEach(ic => {
+          (ic.WarehouseStocks || []).forEach(ws => {
+            const name = ws.Warehouse?.Name ?? 'Unknown';
+            stockMap[name] = (stockMap[name] ?? 0) + (ws.QtyOnHand ?? 0);
+          });
+        });
+        const stockResolved = Object.entries(stockMap).map(([warehouse, qty]) => ({
+          warehouse, qty
+        }));
+
+        // Pilih itemcode paling optimal (algoritma mirip addUpdateCart, harga valid + stok valid + dsb)
+        // 1. Filter harga valid
+        const validItemCodes = itemCodeFalse.filter(item =>
+          item.Price.some(p =>
+            (p.DealerId === dealerId && p.PriceCategoryId == null) ||
+            (p.DealerId == null && p.PriceCategoryId === priceCategoryId) ||
+            (p.WholesalePrices && p.WholesalePrices.length > 0)
+          )
+        );
+        // 2. Pilih stok terbanyak
+        validItemCodes.sort((a, b) => {
+          const stokA = (a.WarehouseStocks || []).reduce((s, ws) => s + (ws.QtyOnHand ?? 0), 0);
+          const stokB = (b.WarehouseStocks || []).reduce((s, ws) => s + (ws.QtyOnHand ?? 0), 0);
+          return stokB - stokA;
+        });
+        // 3. Pakai itemcode pertama hasil sort sebagai representative (untuk IdItemCode, harga, minOrder, dsb)
+        const best = validItemCodes[0] || itemCodeFalse[0];
+        const resolved = resolvePrice2(best.Price, dealerId, priceCategoryId);
+        result.push({
+          IdPartNumber: part.Id,
+          Name: part.Name,
+          AllowItemCodeSelection: false,
+          IdItemCode: best.Id,
+          PriceResolved: resolved.NormalPrice ?? 0,
+          NormalPrice: resolved.NormalPrice ?? 0,
+          WholesalePrice: resolved.WholesalePrice ?? null,
+          MinQtyWholesale: resolved.MinQtyWholesale ?? null,
+          MaxQtyWholesale: resolved.MaxQtyWholesale ?? null,
+          MinOrderQuantity: best.MinOrderQuantity,
+          OrderStep: best.OrderStep,
+          IsWholesalePrice: resolvePrice(best.Price).isWholesale,
+          StockResolved: stockResolved // sudah akumulasi semua itemcode di partnumber
+        });
+      }
     });
-  }
-
-  // --- 2. Jika ADA itemCodeFalse, gabungkan/jadikan satu partnumber untuk semua itemcode false (akumulasi warehouse) ---
-  if (itemCodeFalse.length > 0) {
-    // Akumulasi stok per warehouse
-    const stockMap: { [warehouse: string]: number } = {};
-    itemCodeFalse.forEach(ic => {
-      (ic.WarehouseStocks || []).forEach(ws => {
-        const name = ws.Warehouse?.Name ?? 'Unknown';
-        stockMap[name] = (stockMap[name] ?? 0) + (ws.QtyOnHand ?? 0);
-      });
-    });
-    const stockResolved = Object.entries(stockMap).map(([warehouse, qty]) => ({
-      warehouse, qty
-    }));
-
-    // Pilih itemcode paling optimal (algoritma mirip addUpdateCart, harga valid + stok valid + dsb)
-    // 1. Filter harga valid
-    const validItemCodes = itemCodeFalse.filter(item =>
-      item.Price.some(p =>
-        (p.DealerId === dealerId && p.PriceCategoryId == null) ||
-        (p.DealerId == null && p.PriceCategoryId === priceCategoryId) ||
-        (p.WholesalePrices && p.WholesalePrices.length > 0)
-      )
-    );
-    // 2. Pilih stok terbanyak
-    validItemCodes.sort((a, b) => {
-      const stokA = (a.WarehouseStocks || []).reduce((s, ws) => s + (ws.QtyOnHand ?? 0), 0);
-      const stokB = (b.WarehouseStocks || []).reduce((s, ws) => s + (ws.QtyOnHand ?? 0), 0);
-      return stokB - stokA;
-    });
-    // 3. Pakai itemcode pertama hasil sort sebagai representative (untuk IdItemCode, harga, minOrder, dsb)
-    const best = validItemCodes[0] || itemCodeFalse[0];
-
-    result.push({
-      IdPartNumber: part.Id,
-      Name: part.Name, // Nama partnumber (karena semua false)
-      AllowItemCodeSelection: false,
-      IdItemCode: best.Id,
-      PriceResolved: resolvePrice(best.Price).price ?? 0,
-      MinOrderQuantity: best.MinOrderQuantity,
-      OrderStep: best.OrderStep,
-      IsWholesalePrice: resolvePrice(best.Price).isWholesale,
-      StockResolved: stockResolved // sudah akumulasi semua itemcode di partnumber
-    });
-  }
-});
 
 
 

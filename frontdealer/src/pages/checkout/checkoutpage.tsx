@@ -71,34 +71,6 @@ const CheckoutPage = () => {
 
 
   useEffect(() => {
-    const fetchCart = async () => {
-      if (!userId || !token) return;
-
-      try {
-        const res = await fetch('/api/dealer/dealer/cart/get', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`, // ⬅️ tambahkan token selalu!
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ UserId: userId }),
-        });
-
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message);
-        setCart(data.data);
-
-        const qtyMap: Record<number, number> = {};
-        data.data.CartItems.forEach((item: CartItem) => {
-          qtyMap[item.ItemCodeId] = item.Quantity;
-        });
-        setLocalQuantities(qtyMap);
-      } catch (err) {
-        console.error(err);
-        setError('Gagal mengambil data keranjang.');
-      }
-    };
 
     fetchCart();
   }, [userId]);
@@ -121,6 +93,35 @@ const CheckoutPage = () => {
 
     fetchAllRules();
   }, [cart]);
+
+  const fetchCart = async () => {
+    if (!userId || !token) return;
+
+    try {
+      const res = await fetch('/api/dealer/dealer/cart/get', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`, // ⬅️ tambahkan token selalu!
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ UserId: userId }),
+      });
+
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      setCart(data.data);
+
+      const qtyMap: Record<number, number> = {};
+      data.data.CartItems.forEach((item: CartItem) => {
+        qtyMap[item.ItemCodeId] = item.Quantity;
+      });
+      setLocalQuantities(qtyMap);
+    } catch (err) {
+      console.error(err);
+      setError('Gagal mengambil data keranjang.');
+    }
+  };
 
   const fetchOrderRules = async (itemCodeId: number) => {
     const token = sessionStorage.getItem('userToken');
@@ -176,7 +177,7 @@ const CheckoutPage = () => {
           );
         return { ...prev, CartItems: updatedItems };
       });
-
+      await fetchCart();
       setSuccess('Kuantitas berhasil diperbarui!');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {

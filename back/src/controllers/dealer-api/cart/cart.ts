@@ -5,6 +5,38 @@ import type { CartItem } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+function resolvePrice(prices: any[], dealerId: any, priceCategoryId: any, quantity: number) {
+  // 1. Cek WholesalePrice (aktif, dealer sesuai, range qty cocok)
+  for (const p of prices) {
+    if (p.DealerId === dealerId && p.WholesalePrices && p.WholesalePrices.length > 0) {
+      for (const wp of p.WholesalePrices) {
+        if (wp.MinQuantity <= quantity && quantity <= wp.MaxQuantity) {
+          return { price: p.Price, source: "wholesale", min: wp.MinQuantity, max: wp.MaxQuantity };
+        }
+      }
+    }
+  }
+  // 2. Cek Dealer Specific (dealerId ada, priceCategoryId null, tanpa wholesale)
+  const dealerSpecific = prices.find(p =>
+    p.DealerId === dealerId &&
+    p.PriceCategoryId == null &&
+    (!p.WholesalePrices || p.WholesalePrices.length === 0)
+  );
+  if (dealerSpecific) {
+    return { price: dealerSpecific.Price, source: "dealer" };
+  }
+  // 3. Cek PriceCategory (dealerId null, priceCategoryId = dealer punya)
+  const byCategory = prices.find(p =>
+    p.DealerId == null &&
+    p.PriceCategoryId === priceCategoryId
+  );
+  if (byCategory) {
+    return { price: byCategory.Price, source: "category" };
+  }
+  // Tidak ada harga
+  return { price: 0, source: null };
+}
+
 export const addUpdateCart = async (req: Request, res: Response): Promise<void> => {
   try {
     const loginUser = req.user;
@@ -54,7 +86,7 @@ export const addUpdateCart = async (req: Request, res: Response): Promise<void> 
       return; // ⛔ pastikan return di sini agar tidak lanjut ke bawah
     }
 
-// Step 1: Ambil dealer dan warehouse prioritas
+    // Step 1: Ambil dealer dan warehouse prioritas
     const user = await prisma.user.findUnique({
       where: { Id: Number(UserId) },
       include: { Dealer: { include: { PriceCategory: true } } }
@@ -68,107 +100,120 @@ export const addUpdateCart = async (req: Request, res: Response): Promise<void> 
 
     // Step 2: Ambil semua ItemCode dari PartNumber (AllowItemCodeSelection=false)
     const requestItem = await prisma.itemCode.findUnique({
-  where: { Id: Number(ItemCodeId), DeletedAt: null },
-  include: {
-    PartNumber: true,
-    Price: {  // ⬅️ tambahkan ini!
-      where: { DeletedAt: null },
-      include: { WholesalePrices: { where: { DeletedAt: null } } }
-    },
-    WarehouseStocks: { where: { DeletedAt: null } }, // ⬅️ tambahkan ini!
-  }
-});
+      where: { Id: Number(ItemCodeId), DeletedAt: null },
+      include: {
+        PartNumber: true,
+        Price: {  // ⬅️ tambahkan ini!
+          where: { DeletedAt: null },
+          include: { WholesalePrices: { where: { DeletedAt: null } } }
+        },
+        WarehouseStocks: { where: { DeletedAt: null } }, // ⬅️ tambahkan ini!
+      }
+    });
 
     if (!requestItem) {
       res.status(404).json({ message: "ItemCode not found." });
       return;
     }
-// Setelah requestItem diambil...
-if (requestItem.AllowItemCodeSelection) {
-  // 1. Cek harga valid
-  const hasValidPrice = requestItem.Price.some(p =>
-    (p.DealerId === dealerId && p.PriceCategoryId == null) ||
-    (p.DealerId == null && p.PriceCategoryId === priceCategoryId) ||
-    (p.WholesalePrices && p.WholesalePrices.length > 0)
-  );
-  if (!hasValidPrice) {
-    res.status(400).json({ message: "ItemCode tidak memiliki harga aktif untuk dealer ini." });
-    return;
-  }
-  // 2. Cek stok valid
-  const totalStock = requestItem.WarehouseStocks.reduce((sum, ws) => sum + ws.QtyOnHand, 0);
-  if (totalStock < Quantity) {
-    res.status(400).json({ message: "Stok tidak cukup untuk ItemCode yang dipilih.", detail: { Needed: Quantity, Available: totalStock } });
-    return;
-  }
-  // 3. Validasi MinOrder dan Step
-  if (requestItem.MinOrderQuantity && Quantity < requestItem.MinOrderQuantity) {
-    res.status(400).json({ message: `Minimum order quantity is ${requestItem.MinOrderQuantity}` });
-    return;
-  }
-  if (requestItem.OrderStep && Quantity % requestItem.OrderStep !== 0) {
-    res.status(400).json({ message: `Quantity must be multiples of ${requestItem.OrderStep}` });
-    return;
-  }
-  // 4. Proses add/update cart pakai ItemCodeId yang dipilih user
-  let cart = await prisma.cart.findUnique({
-    where: { UserId: Number(UserId) },
-    include: { CartItems: { include: { ItemCode: true } } }
-  });
-  if (!cart) {
-    cart = await prisma.cart.create({
-      data: {
-        UserId: Number(UserId),
-        CartItems: { create: [{ ItemCodeId: requestItem.Id, Quantity }] }
-      },
-      include: { CartItems: { include: { ItemCode: true } } }
-    });
-    res.status(201).json({
-      message: "Cart created and item added.",
-      FinalItemCodeId: requestItem.Id,
-      data: cart
-    });
-    return;
-  }
-  const existingExact = cart.CartItems.find(ci => ci.ItemCodeId === requestItem.Id);
-  if (existingExact) {
-    const newQty = mode === "increment" ? existingExact.Quantity + Quantity : Quantity;
-    if (newQty <= 0) {
-      await prisma.cartItem.delete({ where: { Id: existingExact.Id } });
-      const remainingItems = await prisma.cartItem.findMany({ where: { CartId: cart.Id } });
-      if (remainingItems.length === 0) {
-        await prisma.cart.delete({ where: { Id: cart.Id } });
-        res.status(200).json({ message: "Cart emptied because all items removed." });
-      } else {
-        res.status(200).json({ message: "Item removed from cart." });
-      }
+
+    // --- Tambahkan di sini ---
+    const resolved = resolvePrice(requestItem.Price, dealerId, priceCategoryId, Quantity);
+    if (resolved.price === 0) {
+      res.status(400).json({ message: "Tidak ada harga aktif untuk dealer dan quantity ini." });
       return;
     }
-    await prisma.cartItem.update({
-      where: { Id: existingExact.Id },
-      data: { Quantity: newQty }
-    });
-    res.status(200).json({
-      message: "Cart updated.",
-      FinalItemCodeId: requestItem.Id
-    });
-    return;
-  }
-  // Hapus CartItem lain pada partnumber selain yang terpilih
-  for (const ci of cart.CartItems) {
-    if (ci.ItemCode.PartNumberId === requestItem.PartNumberId && ci.ItemCodeId !== requestItem.Id) {
-      await prisma.cartItem.delete({ where: { Id: ci.Id } });
+    if (resolved.source === "wholesale" && (Quantity < resolved.min || Quantity > resolved.max)) {
+      res.status(400).json({ message: `Qty harus antara ${resolved.min} dan ${resolved.max} untuk harga grosir.` });
+      return;
     }
-  }
-  await prisma.cartItem.create({
-    data: { CartId: cart.Id, ItemCodeId: requestItem.Id, Quantity }
-  });
-  res.status(201).json({
-    message: "Item added to cart.",
-    FinalItemCodeId: requestItem.Id
-  });
-  return; // ⛔ Penting: langsung return, jangan lanjut ke bawah!
-}
+
+
+    // Setelah requestItem diambil...
+    if (requestItem.AllowItemCodeSelection) {
+      // 1. Cek harga valid
+      const hasValidPrice = requestItem.Price.some(p =>
+        (p.DealerId === dealerId && p.PriceCategoryId == null) ||
+        (p.DealerId == null && p.PriceCategoryId === priceCategoryId) ||
+        (p.WholesalePrices && p.WholesalePrices.length > 0)
+      );
+      if (!hasValidPrice) {
+        res.status(400).json({ message: "ItemCode tidak memiliki harga aktif untuk dealer ini." });
+        return;
+      }
+      // 2. Cek stok valid
+      const totalStock = requestItem.WarehouseStocks.reduce((sum, ws) => sum + ws.QtyOnHand, 0);
+      if (totalStock < Quantity) {
+        res.status(400).json({ message: "Stok tidak cukup untuk ItemCode yang dipilih.", detail: { Needed: Quantity, Available: totalStock } });
+        return;
+      }
+      // 3. Validasi MinOrder dan Step
+      if (requestItem.MinOrderQuantity && Quantity < requestItem.MinOrderQuantity) {
+        res.status(400).json({ message: `Minimum order quantity is ${requestItem.MinOrderQuantity}` });
+        return;
+      }
+      if (requestItem.OrderStep && Quantity % requestItem.OrderStep !== 0) {
+        res.status(400).json({ message: `Quantity must be multiples of ${requestItem.OrderStep}` });
+        return;
+      }
+      // 4. Proses add/update cart pakai ItemCodeId yang dipilih user
+      let cart = await prisma.cart.findUnique({
+        where: { UserId: Number(UserId) },
+        include: { CartItems: { include: { ItemCode: true } } }
+      });
+      if (!cart) {
+        cart = await prisma.cart.create({
+          data: {
+            UserId: Number(UserId),
+            CartItems: { create: [{ ItemCodeId: requestItem.Id, Quantity }] }
+          },
+          include: { CartItems: { include: { ItemCode: true } } }
+        });
+        res.status(201).json({
+          message: "Cart created and item added.",
+          FinalItemCodeId: requestItem.Id,
+          data: cart
+        });
+        return;
+      }
+      const existingExact = cart.CartItems.find(ci => ci.ItemCodeId === requestItem.Id);
+      if (existingExact) {
+        const newQty = mode === "increment" ? existingExact.Quantity + Quantity : Quantity;
+        if (newQty <= 0) {
+          await prisma.cartItem.delete({ where: { Id: existingExact.Id } });
+          const remainingItems = await prisma.cartItem.findMany({ where: { CartId: cart.Id } });
+          if (remainingItems.length === 0) {
+            await prisma.cart.delete({ where: { Id: cart.Id } });
+            res.status(200).json({ message: "Cart emptied because all items removed." });
+          } else {
+            res.status(200).json({ message: "Item removed from cart." });
+          }
+          return;
+        }
+        await prisma.cartItem.update({
+          where: { Id: existingExact.Id },
+          data: { Quantity: newQty }
+        });
+        res.status(200).json({
+          message: "Cart updated.",
+          FinalItemCodeId: requestItem.Id
+        });
+        return;
+      }
+      // Hapus CartItem lain pada partnumber selain yang terpilih
+      for (const ci of cart.CartItems) {
+        if (ci.ItemCode.PartNumberId === requestItem.PartNumberId && ci.ItemCodeId !== requestItem.Id) {
+          await prisma.cartItem.delete({ where: { Id: ci.Id } });
+        }
+      }
+      await prisma.cartItem.create({
+        data: { CartId: cart.Id, ItemCodeId: requestItem.Id, Quantity }
+      });
+      res.status(201).json({
+        message: "Item added to cart.",
+        FinalItemCodeId: requestItem.Id
+      });
+      return; // ⛔ Penting: langsung return, jangan lanjut ke bawah!
+    }
 
 
     const partNumberId = requestItem.PartNumberId;
@@ -338,8 +383,8 @@ if (requestItem.AllowItemCodeSelection) {
       return;
     }
 
-     
-     // Hapus CartItem lain pada partnumber selain yang terpilih
+
+    // Hapus CartItem lain pada partnumber selain yang terpilih
     for (const ci of cart.CartItems) {
       if (ci.ItemCode.PartNumberId === partNumberId && ci.ItemCodeId !== best.ItemCodeId) {
         await prisma.cartItem.delete({ where: { Id: ci.Id } });
@@ -363,21 +408,47 @@ if (requestItem.AllowItemCodeSelection) {
 };
 
 export const getOrderRules = async (req: Request, res: Response) => {
-  const { ItemCodeId } = req.body;
+  const { ItemCodeId, Quantity } = req.body;
+  const loginUser = req.user;
 
+  // 1. Validasi user & input
+  if (!loginUser) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
   if (!ItemCodeId || isNaN(Number(ItemCodeId))) {
     res.status(400).json({ message: "Invalid ItemCodeId" });
     return;
   }
 
+  // 2. Ambil data user beserta dealer & price category
+  const user = await prisma.user.findUnique({
+    where: { Id: Number(loginUser.Id) },
+    include: { Dealer: { include: { PriceCategory: true } } }
+  });
+  if (!user || !user.Dealer) {
+    res.status(400).json({ message: "User is not associated with a dealer." });
+    return;
+  }
+  const dealerId = user.Dealer.Id;
+  const priceCategoryId = user.Dealer.PriceCategoryId;
+
+  // 3. Ambil detail item beserta semua kombinasi harga & stok
   const item = await prisma.itemCode.findUnique({
     where: { Id: Number(ItemCodeId) },
     include: {
       PartNumber: {
         include: {
-          ItemCode: true,
+          ItemCode: {
+            include: {
+              Price: { where: { DeletedAt: null }, include: { WholesalePrices: { where: { DeletedAt: null } } } },
+              WarehouseStocks: { where: { DeletedAt: null } },
+            }
+          },
         },
       },
+      Price: { where: { DeletedAt: null }, include: { WholesalePrices: { where: { DeletedAt: null } } } },
+      WarehouseStocks: { where: { DeletedAt: null } }
     },
   });
 
@@ -386,30 +457,113 @@ export const getOrderRules = async (req: Request, res: Response) => {
     return;
   }
 
+  // 4. Jika AllowItemCodeSelection: true → rules langsung pakai item ini
   if (item.AllowItemCodeSelection) {
+    const resolved = resolvePrice(item.Price, dealerId, priceCategoryId, Quantity ?? 1);
+    const totalStock = item.WarehouseStocks.reduce((sum, ws) => sum + ws.QtyOnHand, 0);
+
+    // Cari wholesale info
+    let minWholesale = null, maxWholesale = null;
+    const priceObj = item.Price.find(p => 
+      p.DealerId === dealerId && p.WholesalePrices && p.WholesalePrices.length > 0
+    );
+    if (priceObj && priceObj.WholesalePrices.length > 0) {
+      // Cari range min max dari semua range wholesale yg aktif
+      const range = priceObj.WholesalePrices.reduce((acc, wp) => {
+        if (acc.min === null || wp.MinQuantity < acc.min) acc.min = wp.MinQuantity;
+        if (acc.max === null || wp.MaxQuantity > acc.max) acc.max = wp.MaxQuantity;
+        return acc;
+      }, { min: null as null | number, max: null as null | number });
+      minWholesale = range.min;
+      maxWholesale = range.max;
+    }
+
     res.status(200).json({
       AllowSelection: true,
       MinOrderQuantity: item.MinOrderQuantity || 1,
       OrderStep: item.OrderStep || 1,
+      TotalStock: totalStock,
+      Price: resolved.price,
+      PriceSource: resolved.source,
+      MinQtyWholesale: minWholesale,
+      MaxQtyWholesale: maxWholesale,
+      PriceValid: resolved.price > 0,
+      StockValid: totalStock >= (Quantity ?? 1),
+      Message:
+        resolved.price === 0
+          ? "Tidak ada harga aktif untuk dealer dan quantity ini."
+          : totalStock < (Quantity ?? 1)
+            ? "Stok tidak cukup untuk ItemCode yang dipilih."
+            : "OK",
     });
-  } else {
-    const fixedItemCodes = item.PartNumber?.ItemCode.filter(i => !i.AllowItemCodeSelection) || [];
-
-    const maxMin = fixedItemCodes.length > 0
-      ? Math.max(...fixedItemCodes.map(i => i.MinOrderQuantity || 1))
-      : 1;
-
-    const maxStep = fixedItemCodes.length > 0
-      ? Math.max(...fixedItemCodes.map(i => i.OrderStep || 1))
-      : 1;
-
-    res.status(200).json({
-      AllowSelection: false,
-      PartNumber: item.PartNumber?.Name,
-      MinOrderQuantity: maxMin,
-      OrderStep: maxStep,
-    });
+    return;
   }
+
+  // 5. Jika AllowItemCodeSelection: false → rules pakai item lain di partnumber
+  const itemCodes = item.PartNumber?.ItemCode.filter(i => !i.AllowItemCodeSelection) || [];
+  let chosenItem: any = null;
+  let chosenPrice: any = null;
+  let chosenStock = 0;
+  let maxStock = 0;
+
+  for (const ic of itemCodes) {
+    const resolved = resolvePrice(ic.Price, dealerId, priceCategoryId, Quantity ?? 1);
+    const totalStock = ic.WarehouseStocks.reduce((sum, ws) => sum + ws.QtyOnHand, 0);
+    if (resolved.price > 0 && totalStock >= (Quantity ?? 1) && totalStock > maxStock) {
+      chosenItem = ic;
+      chosenPrice = resolved;
+      chosenStock = totalStock;
+      maxStock = totalStock;
+    }
+  }
+
+  if (!chosenItem) {
+    res.status(400).json({
+      AllowSelection: false,
+      Message: "Tidak ada item dengan harga dan stok yang valid untuk dealer ini.",
+      MinOrderQuantity: null,
+      OrderStep: null,
+      Price: null,
+      PriceSource: null,
+      MinQtyWholesale: null,
+      MaxQtyWholesale: null,
+      TotalStock: null,
+      PriceValid: false,
+      StockValid: false,
+    });
+    return;
+  }
+
+  // Cari wholesale info pada chosenItem
+  let minWholesale = null, maxWholesale = null;
+  const priceObj = chosenItem.Price.find((p: { DealerId: number; WholesalePrices: string | any[]; }) =>
+    p.DealerId === dealerId && p.WholesalePrices && p.WholesalePrices.length > 0
+  );
+  if (priceObj && priceObj.WholesalePrices.length > 0) {
+    // Cari range min max dari semua range wholesale yg aktif
+    const range = priceObj.WholesalePrices.reduce((acc: { min: number | null; max: number | null; }, wp: { MinQuantity: number; MaxQuantity: number; }) => {
+      if (acc.min === null || wp.MinQuantity < acc.min) acc.min = wp.MinQuantity;
+      if (acc.max === null || wp.MaxQuantity > acc.max) acc.max = wp.MaxQuantity;
+      return acc;
+    }, { min: null as null | number, max: null as null | number });
+    minWholesale = range.min;
+    maxWholesale = range.max;
+  }
+
+  res.status(200).json({
+    AllowSelection: false,
+    PartNumber: item.PartNumber?.Name,
+    MinOrderQuantity: chosenItem.MinOrderQuantity || 1,
+    OrderStep: chosenItem.OrderStep || 1,
+    TotalStock: chosenStock,
+    Price: chosenPrice.price,
+    PriceSource: chosenPrice.source,
+    MinQtyWholesale: minWholesale,
+    MaxQtyWholesale: maxWholesale,
+    PriceValid: chosenPrice.price > 0,
+    StockValid: chosenStock >= (Quantity ?? 1),
+    Message: "OK",
+  });
 };
 
 export const getCartByUserId = async (req: Request, res: Response): Promise<void> => {
@@ -427,7 +581,7 @@ export const getCartByUserId = async (req: Request, res: Response): Promise<void
       res.status(400).json({ message: "Invalid or missing UserId in request body." });
       return;
     }
-    
+
 
     const cart = await prisma.cart.findUnique({
       where: { UserId: Number(UserId) },
@@ -462,7 +616,7 @@ export const getCartByUserId = async (req: Request, res: Response): Promise<void
       }
     });
 
-   if (!cart) {
+    if (!cart) {
       res.status(404).json({ message: "Cart not found for this UserId." });
       return;
     }
@@ -518,16 +672,15 @@ export const getCartByUserId = async (req: Request, res: Response): Promise<void
         const code = item.ItemCode;
         const allow = code.AllowItemCodeSelection;
 
-
-        // Ambil harga berdasarkan dealer / price category
-        const priceMatch = code.Price.find(p =>
-          (p.DealerId === cart.User.DealerId && p.PriceCategoryId === null) ||
-          (p.DealerId === null && p.PriceCategoryId === cart.User.Dealer?.PriceCategoryId)
+        const resolved = resolvePrice(
+          code.Price,
+          cart.User.DealerId,
+          cart.User.Dealer?.PriceCategoryId,
+          item.Quantity
         );
 
-        // Total stok harus dicek agar tidak tampilkan harga jika stok kosong
         const totalStock = code.WarehouseStocks?.reduce((sum, ws) => sum + ws.QtyOnHand, 0) ?? 0;
-        const finalPrice = priceMatch?.Price && totalStock > 0 ? priceMatch.Price : 0;
+        const finalPrice = (resolved.price && totalStock > 0) ? resolved.price : 0;
 
 
         return {
@@ -541,6 +694,9 @@ export const getCartByUserId = async (req: Request, res: Response): Promise<void
             ? code.Name
             : code.PartNumber?.Name ?? 'Unnamed PartNumber',
           Price: finalPrice, // ✅ tambahkan ini
+          PriceSource: resolved.source,         // <--- opsional, biar tahu dari mana harga diambil
+          MinQtyWholesale: resolved.min,        // <--- opsional, jika dari grosir
+          MaxQtyWholesale: resolved.max,
           ItemCode: {
             Id: code.Id,
             CreatedAt: code.CreatedAt,

@@ -119,9 +119,7 @@ class ItemCode {
       const {
         PartNumberId,
         Name,
-        BrandCodeId,
         OEM,
-        StockingTypeCode,
         Weight,
         AllowItemCodeSelection = false,
         MinOrderQuantity,
@@ -168,7 +166,6 @@ class ItemCode {
         data: {
           PartNumberId: Number(PartNumberId),
           Name,
-          BrandCodeId: BrandCodeId ? Number(BrandCodeId) : null,
           OEM,
           Weight: Weight ? parseFloat(Weight) : null,
           QtyPO: null,
@@ -192,7 +189,7 @@ class ItemCode {
   updateItemCode = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { Id } = req.params;
-      const { Name, BrandCodeId, OEM, StockingTypeCode, SalesCode, Weight, PartNumberId, AllowItemCodeSelection, MinOrderQuantity, OrderStep } = req.body;
+      const { Name,  OEM, Weight, PartNumberId, AllowItemCodeSelection, MinOrderQuantity, OrderStep } = req.body;
 
       if (!Id || isNaN(Number(Id))) {
         res.status(400).json({ message: "Invalid Item Code ID." });
@@ -248,7 +245,6 @@ class ItemCode {
         where: { Id: Number(Id) },
         data: {
           Name,
-          BrandCodeId: BrandCodeId ? Number(BrandCodeId) : null,
           OEM,
           Weight: Weight ? parseFloat(Weight) : null,
           PartNumberId: PartNumberId ? Number(PartNumberId) : null,

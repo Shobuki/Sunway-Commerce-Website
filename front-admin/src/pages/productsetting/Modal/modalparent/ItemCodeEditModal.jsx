@@ -27,7 +27,6 @@ const ItemCodeEditModal = ({ isOpen, onClose, onSave, productId }) => {  // ✅ 
   useEffect(() => {
     if (isOpen && productId) {
       fetchAllData();
-      fetchItemCodeImages();
     }
   }, [isOpen, productId]);
 
@@ -116,40 +115,6 @@ const ItemCodeEditModal = ({ isOpen, onClose, onSave, productId }) => {  // ✅ 
     }
   };
 
-  const fetchItemCodeImages = async () => {
-    if (!productId) {
-      console.warn("fetchItemCodeImages called with undefined productId");
-      return; // 🚀 Cegah request jika productId tidak valid
-    }
-
-    console.log("Fetching images for productId:", productId); // ✅ Debugging Log
-
-    try {
-      const response = await axios.get(
-        `/api/admin/admin/products/item-codes/images/${productId}`
-      );
-
-      if (response.data?.data?.length > 0) {
-        setImages(
-          response.data.data.map((img) => ({
-            Id: img.Id,
-            ImageUrl: `/${img.ImageUrl}`, // ✅ Pastikan URL gambar benar
-            CreatedAt: img.CreatedAt,
-          }))
-        );
-      } else {
-        console.warn("No images found for productId:", productId);
-        setImages([]); // Jika tidak ada gambar, kosongkan daftar
-      }
-    } catch (error) {
-      if (error.response && error.response.status === 404) {
-        console.warn("No images found for productId:", productId);
-        setImages([]); // Jika tidak ada gambar, kosongkan daftar
-      } else {
-        console.error("Error fetching item code images:", error);
-      }
-    }
-  };
 
 
 
@@ -166,7 +131,6 @@ const ItemCodeEditModal = ({ isOpen, onClose, onSave, productId }) => {  // ✅ 
       await axios.post("/api/admin/admin/products/item-codes/images", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      fetchItemCodeImages();
     } catch (error) {
       console.error("Error uploading image:", error);
     } finally {
@@ -254,22 +218,6 @@ const ItemCodeEditModal = ({ isOpen, onClose, onSave, productId }) => {  // ✅ 
               onChange={handleInputChange}
               className="border p-2 w-full rounded"
             />
-          </div>
-          <div>
-            <label className="block font-medium">Brand</label>
-            <select
-              name="BrandCodeId"
-              value={formData.BrandCodeId}
-              onChange={handleInputChange}
-              className="border p-2 w-full rounded"
-            >
-              <option value="">Select Brand</option>
-              {brands.map((brand) => (
-                <option key={brand.Id} value={brand.Id}>
-                  {brand.DisplayName}
-                </option>
-              ))}
-            </select>
           </div>
           <div>
 
@@ -383,36 +331,6 @@ const ItemCodeEditModal = ({ isOpen, onClose, onSave, productId }) => {  // ✅ 
           </div>
         </div>
 
-        <div className="mt-4">
-          <label className="block font-medium">Upload Item Code Image</label>
-          <input type="file" className="border p-2 w-full rounded" onChange={handleUpload} disabled={uploading} />
-        </div>
-
-        <div className="mt-4">
-          <h3 className="font-bold">Uploaded Images:</h3>
-          {images.length > 0 ? (
-            <div className="grid grid-cols-3 gap-4">
-              {images.map((image) => (
-                <div key={image.Id} className="relative group">
-                  <img
-                    src={image.ImageUrl}
-                    alt="Item Code"
-                    className="w-full h-32 object-contain rounded-md shadow-md"
-                    onError={(e) => (e.target.src = "/images/default-placeholder.png")}
-                  />
-                  <button
-                    onClick={() => handleDelete(image.Id)}
-                    className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 text-sm rounded-md opacity-0 group-hover:opacity-100 transition"
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500">No images available.</p>
-          )}
-        </div>
 
 
 

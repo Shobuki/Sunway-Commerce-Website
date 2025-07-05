@@ -11,6 +11,10 @@ interface PartNumber {
   AllowItemCodeSelection: boolean;
   IdItemCode: number;
   PriceResolved?: number;
+  NormalPrice: number;
+  WholesalePrice?: number | null;      // <--- tambahkan
+  MinQtyWholesale?: number | null;     // <--- tambahkan
+  MaxQtyWholesale?: number | null;     // <--- tambahkan
   MinOrderQuantity?: number;
   OrderStep?: number;
   IsWholesalePrice?: boolean;
@@ -31,6 +35,9 @@ const PopupChoose: React.FC<{ productId: number; onClose?: () => void }> = ({ pr
   const [customErrorMessage, setCustomErrorMessage] = useState<string | null>(null);
 
   const [finalItemCodeId, setFinalItemCodeId] = useState<number | null>(null);
+
+  const [orderRule, setOrderRule] = useState<any>(null);
+  const [loadingRule, setLoadingRule] = useState(false);
 
   useEffect(() => {
     const fetchUserId = async () => {
@@ -80,32 +87,58 @@ const PopupChoose: React.FC<{ productId: number; onClose?: () => void }> = ({ pr
   }, [productId, userId]);
 
   // Fetch rules tiap kali ganti pilihan
-  useEffect(() => {
-    if (selectedIdx === null || partNumbers.length === 0) return;
-    const fetchOrderRules = async () => {
-      const itemCodeId = partNumbers[selectedIdx].IdItemCode;
-      if (!itemCodeId) return;
-      const token = sessionStorage.getItem('userToken');
-      try {
-        const res = await fetch('/api/dealer/dealer/cart/rules', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ ItemCodeId: itemCodeId }),
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        setMinOrder(data.MinOrderQuantity);
-        setStepOrder(data.OrderStep);
-      } catch {
-        setMinOrder(1);
-        setStepOrder(1);
+ useEffect(() => {
+  if (selectedIdx === null || partNumbers.length === 0) return;
+
+  const fetchOrderRules = async () => {
+    const itemCodeId = partNumbers[selectedIdx].IdItemCode;
+    if (!itemCodeId) return;
+    setLoadingRule(true);
+    setOrderRule(null);
+    setError(null);
+
+    const token = sessionStorage.getItem('userToken');
+    try {
+      // HANYA kirim ItemCodeId dan Quantity, JANGAN UserId
+      const res = await fetch('/api/dealer/dealer/cart/rules', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ ItemCodeId: itemCodeId, Quantity: quantity }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setOrderRule(null);
+        setError(data?.Message || data?.message || 'Gagal mengambil aturan order');
+        return;
       }
-    };
-    fetchOrderRules();
-  }, [selectedIdx, partNumbers]);
+
+      setOrderRule(data);
+      setMinOrder(data.MinOrderQuantity || 1);
+      setStepOrder(data.OrderStep || 1);
+      setError('');
+    } catch {
+      setOrderRule(null);
+      setError('Gagal mengambil aturan order');
+    } finally {
+      setLoadingRule(false);
+    }
+  };
+  fetchOrderRules();
+}, [selectedIdx, quantity, partNumbers]);
+
+  useEffect(() => {
+    if (orderRule) {
+      setMinOrder(orderRule.MinOrderQuantity || 1);
+      setStepOrder(orderRule.OrderStep || 1);
+      if (quantity < (orderRule.MinOrderQuantity || 1)) {
+        setQuantity(orderRule.MinOrderQuantity || 1);
+      }
+    }
+  }, [orderRule]);
 
   const handleSelect = (idx: number) => {
     setSelectedIdx(idx);
@@ -114,14 +147,35 @@ const PopupChoose: React.FC<{ productId: number; onClose?: () => void }> = ({ pr
     setError(null);
   };
 
-  const addToCart = async () => {
+   const addToCart = async () => {
     if (selectedIdx === null) {
       setError('Pilih produk terlebih dahulu');
       setShowFail(true);
       return;
     }
-    if (quantity < minOrder || quantity % stepOrder !== 0) {
-      setError(`Kuantitas harus ≥ ${minOrder} dan kelipatan ${stepOrder}`);
+    // Cek orderRule dari backend
+    if (!orderRule) {
+      setError('Tidak dapat memproses, aturan order belum siap');
+      setShowFail(true);
+      return;
+    }
+    if (!orderRule.PriceValid) {
+      setError(orderRule.Message || 'Harga tidak valid');
+      setShowFail(true);
+      return;
+    }
+    if (!orderRule.StockValid) {
+      setError(orderRule.Message || 'Stok tidak cukup');
+      setShowFail(true);
+      return;
+    }
+    if (quantity < orderRule.MinOrderQuantity) {
+      setError(`Kuantitas harus minimal ${orderRule.MinOrderQuantity}`);
+      setShowFail(true);
+      return;
+    }
+    if (quantity % orderRule.OrderStep !== 0) {
+      setError(`Kuantitas harus kelipatan ${orderRule.OrderStep}`);
       setShowFail(true);
       return;
     }
@@ -163,6 +217,7 @@ const PopupChoose: React.FC<{ productId: number; onClose?: () => void }> = ({ pr
       setShowFail(true);
     }
   };
+
 
   // Responsive: grid mobile 1, sm 2, md 3, lg 4
   return (
@@ -216,16 +271,29 @@ const PopupChoose: React.FC<{ productId: number; onClose?: () => void }> = ({ pr
                   {/* ISI KONTEN */}
                   <div className="flex-1 flex flex-col justify-between px-3 pb-2 pt-0">
                     {/* HARGA */}
-                    <div className="mb-1 text-sm text-gray-700 min-h-[1.6rem]">
-                      {part.PriceResolved && part.PriceResolved > 0 ? (
-                        <span>
-                          <span role="img" aria-label="fire">💵</span>
-                          &nbsp;Harga: <span className="font-semibold">Rp{part.PriceResolved.toLocaleString()}</span>
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 italic">No price found</span>
-                      )}
-                    </div>
+                    {/* HARGA */}
+<div className="mb-1 text-sm text-gray-700 min-h-[2.3rem] flex flex-col gap-0.5">
+  {(part.NormalPrice > 0 || part.WholesalePrice) ? (
+    <>
+      {/* Harga Normal */}
+      {part.NormalPrice > 0 && (
+        <span>
+          <span className="font-medium">Harga:</span>&nbsp;
+          <span className="font-semibold">Rp{Number(part.NormalPrice).toLocaleString()}</span>
+        </span>
+      )}
+      {/* Harga Grosir */}
+      {part.WholesalePrice && part.MinQtyWholesale && part.MaxQtyWholesale ? (
+        <span className="text-xs text-green-700 mt-0.5">
+          Harga grosir min pembelian {part.MinQtyWholesale}-{part.MaxQtyWholesale}:&nbsp;
+          <span className="font-semibold">Rp{Number(part.WholesalePrice).toLocaleString()}</span>
+        </span>
+      ) : null}
+    </>
+  ) : (
+    <span className="text-gray-400 italic">No price found</span>
+  )}
+</div>
                     {/* STOK */}
                     <ul className="text-xs text-gray-700 mb-2">
                       {(part.StockResolved || []).map((s, i) => (
@@ -287,12 +355,12 @@ const PopupChoose: React.FC<{ productId: number; onClose?: () => void }> = ({ pr
       )}
 
       <button
-        onClick={addToCart}
-        disabled={!userId || selectedIdx === null}
-        className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed w-full font-semibold mt-2"
-      >
-        Tambahkan ke Keranjang
-      </button>
+  onClick={addToCart}
+  disabled={!userId || selectedIdx === null || loadingRule || !orderRule || !orderRule.PriceValid || !orderRule.StockValid}
+  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed w-full font-semibold mt-2"
+>
+  Tambahkan ke Keranjang
+</button>
 
       {showSuccess && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-40 z-50">
@@ -336,6 +404,38 @@ const PopupChoose: React.FC<{ productId: number; onClose?: () => void }> = ({ pr
           </div>
         </div>
       )}
+      {loadingRule ? (
+        <div className="my-2 text-sm text-gray-500">Memuat aturan order...</div>
+      ) : orderRule ? (
+        <div>
+  <span className="font-semibold">Harga:&nbsp;</span>
+  {orderRule.MinQtyWholesale && orderRule.MaxQtyWholesale && orderRule.PriceSource === 'wholesale' ? (
+    <>
+      QTY grosir {orderRule.MinQtyWholesale}-{orderRule.MaxQtyWholesale} mendapat harga&nbsp;
+      <span className="font-semibold">
+        Rp{Number(orderRule.Price).toLocaleString()}
+      </span>
+      {orderRule.PriceSource && (
+        <span className="text-xs text-gray-400 ml-2">({orderRule.PriceSource})</span>
+      )}
+      <br />
+      harga normal {orderRule.NormalPrice
+        ? `Rp${Number(orderRule.NormalPrice).toLocaleString()}`
+        : "-"}
+    </>
+  ) : (
+    <>
+      harga normal&nbsp;
+      <span className="font-semibold">
+        Rp{Number(orderRule.Price).toLocaleString()}
+      </span>
+      {orderRule.PriceSource && (
+        <span className="text-xs text-gray-400 ml-2">({orderRule.PriceSource})</span>
+      )}
+    </>
+  )}
+</div>
+      ) : null}
     </div>
   );
 };

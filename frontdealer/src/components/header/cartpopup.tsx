@@ -20,7 +20,11 @@ interface CartItem {
   ItemCodeId: number;
   Quantity: number;
   DisplayName: string;
-  Price?: number; // ← tambahkan ini
+  Price?: number; // NOT dipakai langsung untuk auto
+  NormalPrice?: number; // tambahkan
+  WholesalePrice?: number | null; // tambahkan
+  MinQtyWholesale?: number | null; // tambahkan
+  MaxQtyWholesale?: number | null; // tambahkan
   ItemCode: ItemCode;
 }
 
@@ -40,58 +44,49 @@ const CartPopup: React.FC<CartPopupProps> = ({ isOpen, onClose }) => {
   const router = useRouter();
 
   useEffect(() => {
-    const fetchCart = async () => {
-      const token = sessionStorage.getItem('userToken');
-      const userId = sessionStorage.getItem('userId');
-      if (!token || !userId) return;
-
-      try {
-        const res = await fetch('/api/dealer/dealer/cart/get', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ UserId: Number(userId) }),
-        });
-
-        // Tambahan ini
-        if (res.status === 404) {
-          // Cart kosong, bukan error.
-          setCartItems([]);
-          setError(null);
-          return;
-        }
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message);
-        setCartItems(data.data.CartItems);
-
-        const qtyMap: Record<number, number> = {};
-        data.data.CartItems.forEach((item: CartItem) => {
-          qtyMap[item.ItemCodeId] = item.Quantity;
-        });
-        setLocalQuantities(qtyMap);
-
-        data.data.CartItems.forEach((item: CartItem) => {
-          qtyMap[item.ItemCodeId] = item.Quantity;
-          fetchOrderRule(item.ItemCodeId); // Fetch aturan min & step dari backend
-        });
-
-        setError(null); // pastikan reset error
-      } catch (err) {
-        // Tampilkan error hanya jika selain 404/not found
-        console.error(err);
-        setError('Gagal mengambil data keranjang.');
-      }
-    };
 
     if (isOpen) {
       fetchCart();
     }
   }, [isOpen]);
 
+const fetchCart = async () => {
+  const token = sessionStorage.getItem('userToken');
+  const userId = sessionStorage.getItem('userId');
+  if (!token || !userId) return;
 
+  try {
+    const res = await fetch('/api/dealer/dealer/cart/get', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ UserId: Number(userId) }),
+    });
+
+    if (res.status === 404) {
+      setCartItems([]);
+      setError(null);
+      return;
+    }
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message);
+    setCartItems(data.data.CartItems);
+
+    const qtyMap: Record<number, number> = {};
+    data.data.CartItems.forEach((item: CartItem) => {
+      qtyMap[item.ItemCodeId] = item.Quantity;
+      fetchOrderRule(item.ItemCodeId); // Fetch aturan min & step dari backend
+    });
+    setLocalQuantities(qtyMap);
+    setError(null);
+  } catch (err) {
+    console.error(err);
+    setError('Gagal mengambil data keranjang.');
+  }
+};
 
   const fetchOrderRule = async (itemCodeId: number) => {
     const token = sessionStorage.getItem('userToken');
@@ -140,33 +135,32 @@ const CartPopup: React.FC<CartPopupProps> = ({ isOpen, onClose }) => {
       if (!res.ok) throw new Error(data.message || 'Gagal memperbarui kuantitas.');
 
       setCartItems(prev => prev.map(i => i.ItemCodeId === itemId ? { ...i, Quantity: quantity } : i));
+      await fetchCart();
     } catch (err) {
       console.error(err);
       setError('Gagal memperbarui kuantitas.');
     }
   };
 
-  const validateAndUpdate = (itemId: number, newQty: number) => {
-    setLocalQuantities(prev => ({ ...prev, [itemId]: newQty }));
+  const validateAndUpdate = async (itemId: number, newQty: number) => {
+  setLocalQuantities(prev => ({ ...prev, [itemId]: newQty }));
 
-    const item = cartItems.find(i => i.ItemCodeId === itemId);
-    if (!item) return;
+  const item = cartItems.find(i => i.ItemCodeId === itemId);
+  if (!item) return;
 
-    const rule = orderRules[item.ItemCodeId] || { MinOrderQuantity: 1, OrderStep: 1 };
-    const min = rule.MinOrderQuantity;
-    const step = rule.OrderStep;
+  const rule = orderRules[item.ItemCodeId] || { MinOrderQuantity: 1, OrderStep: 1 };
+  const min = rule.MinOrderQuantity;
+  const step = rule.OrderStep;
 
+  const isValid = newQty >= min && newQty % step === 0;
 
-    const isValid = newQty >= min && newQty % step === 0;
-
-
-    if (isValid) {
-      setError(null);
-      updateQuantityBackend(itemId, newQty);
-    } else {
-      setError(`❌ ${item.DisplayName} harus ≥ ${min} dan kelipatan ${step}`);
-    }
-  };
+  if (isValid) {
+    setError(null);
+    await updateQuantityBackend(itemId, newQty); // <- panggil ini, fetchCart jalan di dalamnya
+  } else {
+    setError(`❌ ${item.DisplayName} harus ≥ ${min} dan kelipatan ${step}`);
+  }
+};
 
   const handleQuantityChange = async (itemId: number, delta: number) => {
     const current = localQuantities[itemId] ?? 0;
@@ -226,11 +220,26 @@ const CartPopup: React.FC<CartPopupProps> = ({ isOpen, onClose }) => {
       setError(`❌ ${item.DisplayName} harus ≥ ${min} dan kelipatan ${step}`);
     }
   };
-
+  const getEffectivePrice = (item: CartItem, qty: number) => {
+    if (
+      item.WholesalePrice &&
+      item.MinQtyWholesale &&
+      item.MaxQtyWholesale &&
+      qty >= item.MinQtyWholesale &&
+      qty <= item.MaxQtyWholesale
+    ) {
+      return item.WholesalePrice;
+    }
+    return item.NormalPrice ?? item.Price ?? 0;
+  };
 
   const totalQty = cartItems.reduce((sum, i) => sum + i.Quantity, 0);
   const totalWeight = cartItems.reduce((sum, i) => sum + (i.ItemCode.Weight || 0) * i.Quantity, 0);
-  const totalHarga = cartItems.reduce((sum, i) => sum + (i.Price ?? 0) * i.Quantity, 0);
+  const totalHarga = cartItems.reduce((sum, i) => {
+    const qty = localQuantities[i.ItemCodeId] ?? i.Quantity;
+    const price = getEffectivePrice(i, qty);
+    return sum + price * qty;
+  }, 0);
 
   const handleCheckout = () => {
     onClose();
@@ -251,22 +260,24 @@ const CartPopup: React.FC<CartPopupProps> = ({ isOpen, onClose }) => {
         <>
           <div className="max-h-64 overflow-y-auto space-y-4">
             {cartItems.map(item => {
-              const allow = item.ItemCode.AllowItemCodeSelection;
               const qty = localQuantities[item.ItemCodeId] ?? item.Quantity;
-              const min = item.ItemCode.MinOrderQuantity || 1;
-              const step = item.ItemCode.OrderStep || 1;
-              const totalItemHarga = (item.Price ?? 0) * qty;
-
-
+              const price = getEffectivePrice(item, qty);
+              const totalItemHarga = price * qty;
 
               return (
                 <div key={item.Id} className="border-b pb-2">
                   <h3 className="font-semibold">
                     {item.DisplayName}
                   </h3>
-                  <p className="text-sm text-gray-500">Harga/unit: Rp {(item.Price ?? 0).toLocaleString()}</p>
+                  <p className="text-sm text-gray-500">
+                    Harga/unit: Rp {price.toLocaleString()}
+                    {item.WholesalePrice && item.MinQtyWholesale && item.MaxQtyWholesale &&
+                      qty >= item.MinQtyWholesale && qty <= item.MaxQtyWholesale && (
+                        <span className="ml-2 text-green-600 font-semibold">(Harga Grosir!)</span>
+                      )}
+                  </p>
                   <p className="text-sm text-gray-500">Total: Rp {totalItemHarga.toLocaleString()}</p>
-                  <p className="text-sm text-gray-500">Min: {min} | Step: {step}</p>
+                  <p className="text-sm text-gray-500">Min: {item.ItemCode.MinOrderQuantity || 1} | Step: {item.ItemCode.OrderStep || 1}</p>
 
                   <div className="flex items-center gap-2 mt-2">
                     <button
@@ -274,13 +285,11 @@ const CartPopup: React.FC<CartPopupProps> = ({ isOpen, onClose }) => {
                       className="px-3 py-1 border rounded"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleQuantityChange(item.ItemCodeId, -step);
+                        handleQuantityChange(item.ItemCodeId, -(item.ItemCode.OrderStep || 1));
                       }}
                     >
                       -
                     </button>
-
-
                     <input
                       type="number"
                       value={qty}
@@ -288,20 +297,16 @@ const CartPopup: React.FC<CartPopupProps> = ({ isOpen, onClose }) => {
                       onChange={(e) => validateAndUpdate(item.ItemCodeId, Number(e.target.value))}
                       className="w-20 text-center border rounded px-2 py-1"
                     />
-
-
                     <button
                       type="button"
                       className="px-3 py-1 border rounded"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleQuantityChange(item.ItemCodeId, step);
+                        handleQuantityChange(item.ItemCodeId, item.ItemCode.OrderStep || 1);
                       }}
                     >
                       +
                     </button>
-
-
                   </div>
                 </div>
               );

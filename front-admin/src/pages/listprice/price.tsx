@@ -268,7 +268,6 @@ const PriceList: React.FC = () => {
   };
 
   const handleCreateDealerPrice = async () => {
-    // Validasi dasar
     const priceError = validatePrice(newPrice);
     if (priceError) {
       alert(priceError);
@@ -278,8 +277,8 @@ const PriceList: React.FC = () => {
       alert("Item not selected or price is invalid.");
       return;
     }
-    if (priceType === "dealer" && !selectedDealerId) {
-      alert("Please select a dealer for dealer specific price.");
+    if (!selectedDealerId) { // DealerId wajib untuk dealer/wholesale
+      alert("Please select a dealer.");
       return;
     }
     if (priceType === "wholesale" && (minQuantity <= 0 || maxQuantity <= 0 || minQuantity >= maxQuantity)) {
@@ -288,35 +287,34 @@ const PriceList: React.FC = () => {
     }
 
     try {
-      const endpoint = priceType === "wholesale" ? "/api/admin/admin/prices/wholesale" : "/api/admin/admin/prices/dealers";
-      const body: any = { ItemCodeId: currentItemId, Price: newPrice };
+      const endpoint =
+        priceType === "wholesale"
+          ? "/api/admin/admin/prices/wholesale"
+          : "/api/admin/admin/prices/dealers";
+      const body: any = {
+        ItemCodeId: currentItemId,
+        Price: newPrice,
+        DealerId: selectedDealerId, // Wajib diisi untuk semua tipe!
+      };
 
       if (priceType === "wholesale") {
         body.MinQuantity = minQuantity;
         body.MaxQuantity = maxQuantity;
-        // body.DealerId = null; // Atau tidak dikirim sama sekali, tergantung API
-      } else { // dealer specific
-        body.DealerId = selectedDealerId;
       }
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (response.status === 403 || response.status === 409) {
-        const errorData = await response.json();
-        alert(errorData.message || "This price configuration might already exist or conflict.");
-        return;
-      }
-      if (!response.ok) throw new Error(`Failed to create price. Status: ${response.status}`);
+      await axios.post(endpoint, body);
 
       setCreateDealerModal(false);
       if (currentItemId) fetchPrices(currentItemId);
       alert("Price created successfully!");
-    } catch (error) {
-      alert(`Error creating price: ${error instanceof Error ? error.message : 'An unknown error occurred'}`);
+    } catch (error: any) {
+      if (error.response && (error.response.status === 403 || error.response.status === 409)) {
+        alert(error.response.data?.message || "This price configuration might already exist or conflict.");
+        return;
+      }
+      alert(
+        `Error creating price: ${error?.message || "An unknown error occurred"}`
+      );
     }
   };
 
@@ -615,27 +613,23 @@ const PriceList: React.FC = () => {
               <option value="dealer">Dealer Specific Price</option>
               <option value="wholesale">Wholesale Price</option>
             </select>
-            {priceType === "dealer" && (
-              <>
-                <label htmlFor="dealerSelect" className="block text-sm font-medium text-gray-700 mb-1 mt-2">Dealer</label>
-<Select
-  id="dealerSelect"
-  className="mb-3"
-  isClearable
-  placeholder="Search or select dealer..."
-  options={dealers.map((dealer) => ({
-    value: dealer.Id,
-    label: dealer.CompanyName,
-  }))}
-  value={dealers.find((d) => d.Id === selectedDealerId)
-    ? { value: selectedDealerId, label: dealers.find((d) => d.Id === selectedDealerId)?.CompanyName }
-    : null}
-  onChange={(selectedOption) => {
-    setSelectedDealerId(selectedOption ? selectedOption.value : null);
-  }}
-/>
-              </>
-            )}
+            <label htmlFor="dealerSelect" className="block text-sm font-medium text-gray-700 mb-1 mt-2">Dealer</label>
+            <Select
+              id="dealerSelect"
+              className="mb-3"
+              isClearable
+              placeholder="Search or select dealer..."
+              options={dealers.map((dealer) => ({
+                value: dealer.Id,
+                label: dealer.CompanyName,
+              }))}
+              value={dealers.find((d) => d.Id === selectedDealerId)
+                ? { value: selectedDealerId, label: dealers.find((d) => d.Id === selectedDealerId)?.CompanyName }
+                : null}
+              onChange={(selectedOption) => {
+                setSelectedDealerId(selectedOption ? selectedOption.value : null);
+              }}
+            />
             <label htmlFor="newDealerPriceInput" className="block text-sm font-medium text-gray-700 mb-1">Enter Price</label>
             <input id="newDealerPriceInput" type="number" value={newPrice} onChange={(e) => setNewPrice(Number(e.target.value))}
               className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3" placeholder="Enter Price"

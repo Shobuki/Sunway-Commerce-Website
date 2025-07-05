@@ -110,14 +110,6 @@ const ItemCodeCreateModal = ({ isOpen, onClose, onSave, partNumberId }) => {
           </div>
           <div>
             <label className="block font-medium">Brand</label>
-            <select name="BrandCodeId" value={formData.BrandCodeId} onChange={handleInputChange} className="border p-2 w-full rounded">
-              <option value="">Select Brand</option>
-              {brands.map((brand) => (
-                <option key={brand.Id} value={brand.Id}>
-                  {brand.DisplayName}
-                </option>
-              ))}
-            </select>
             {errors.BrandCodeId && <p className="text-red-500 text-sm">{errors.BrandCodeId}</p>}
           </div>
           <div>

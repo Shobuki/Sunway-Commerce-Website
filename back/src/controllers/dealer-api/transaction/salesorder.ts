@@ -18,6 +18,37 @@ const LOGO_SunflexStore = path.join(process.cwd(), "public", "dealer", "files", 
 if (!fs.existsSync(EXCEL_DIRECTORY)) fs.mkdirSync(EXCEL_DIRECTORY, { recursive: true });
 if (!fs.existsSync(PDF_DIRECTORY)) fs.mkdirSync(PDF_DIRECTORY, { recursive: true });
 
+function resolvePrice(prices: any[], dealerId: any, priceCategoryId: any, quantity: number) {
+  // 1. Cek WholesalePrice (dealer sesuai, dan quantity masuk range)
+  for (const p of prices) {
+    if (p.DealerId === dealerId && p.WholesalePrices && p.WholesalePrices.length > 0) {
+      for (const wp of p.WholesalePrices) {
+        if (wp.MinQuantity <= quantity && quantity <= wp.MaxQuantity) {
+          return { price: p.Price, source: "wholesale", min: wp.MinQuantity, max: wp.MaxQuantity, priceId: p.Id };
+        }
+      }
+    }
+  }
+  // 2. Cek Dealer Specific
+  const dealerSpecific = prices.find(p =>
+    p.DealerId === dealerId &&
+    p.PriceCategoryId == null &&
+    (!p.WholesalePrices || p.WholesalePrices.length === 0)
+  );
+  if (dealerSpecific) {
+    return { price: dealerSpecific.Price, source: "dealer", priceId: dealerSpecific.Id };
+  }
+  // 3. Cek PriceCategory
+  const byCategory = prices.find(p =>
+    p.DealerId == null &&
+    p.PriceCategoryId === priceCategoryId
+  );
+  if (byCategory) {
+    return { price: byCategory.Price, source: "category", priceId: byCategory.Id };
+  }
+  // Tidak ada harga
+  return { price: 0, source: null, priceId: null };
+}
 
 const getTaxPercentage = async (taxId: number): Promise<number> => {
   const tax = await prisma.tax.findUnique({ where: { Id: taxId } });
@@ -162,46 +193,19 @@ export const convertCartToSalesOrder = async (req: Request, res: Response): Prom
           DeletedAt: null,
         },
         include: {
-          WholesalePrices: {
-            where: { DeletedAt: null },
-            orderBy: { MinQuantity: 'asc' },
-            take: 1,
-            include: {
-              Price: true, // ✅ Tambahkan ini agar relasi Price ikut ter-load
-            },
-          },
+          WholesalePrices: { where: { DeletedAt: null } },
         },
-        orderBy: { CreatedAt: 'desc' },
       });
 
+      const resolved = resolvePrice(
+        itemPrices,
+        dealer.Id,
+        dealer.PriceCategoryId,
+        quantityNeeded
+      );
 
-      let resolvedPrice = null;
-      let usedPriceCategoryId = null;
-
-      // 1. Cek wholesale price terlebih dahulu
-      const wholesalePrice = itemPrices.find(p => p.WholesalePrices.length > 0);
-      if (wholesalePrice) {
-        resolvedPrice = wholesalePrice.WholesalePrices[0].Price?.Price ?? null;
-        usedPriceCategoryId = wholesalePrice.PriceCategoryId ?? null;
-      }
-      else {
-        // 2. Cek dealer-specific
-        const dealerSpecific = itemPrices.find(p => p.DealerId === dealer.Id);
-        if (dealerSpecific) {
-          resolvedPrice = dealerSpecific.Price;
-          usedPriceCategoryId = dealerSpecific.PriceCategoryId ?? null;
-        } else {
-          // 3. Cek price category default
-          const categoryPrice = itemPrices.find(p => p.PriceCategoryId === dealer.PriceCategoryId && !p.DealerId);
-          if (categoryPrice) {
-            resolvedPrice = categoryPrice.Price;
-            usedPriceCategoryId = categoryPrice.PriceCategoryId ?? null;
-          }
-        }
-      }
-
-      if (resolvedPrice === null) {
-        res.status(400).json({ message: `No valid price found for ItemCode ${itemCode.Name}.` });
+      if (!resolved.price || resolved.price === 0) {
+        res.status(400).json({ message: `No valid price for item ${itemCode.Name} at this quantity.` });
         return;
       }
 
@@ -209,18 +213,17 @@ export const convertCartToSalesOrder = async (req: Request, res: Response): Prom
         where: { IsActive: true },
         orderBy: { CreatedAt: "desc" },
       });
-
       const taxRate = tax?.Percentage ?? 0;
-      const finalPrice = resolvedPrice * (1 + taxRate / 100);
+      const finalPrice = resolved.price * (1 + taxRate / 100);
 
       salesOrderDetails.push({
         SalesOrderId: newSalesOrder.Id,
         ItemCodeId: cartItem.ItemCodeId,
         WarehouseId: selectedStock?.WarehouseId ?? null,
         Quantity: quantityNeeded,
-        Price: resolvedPrice,
+        Price: resolved.price,
         FinalPrice: finalPrice,
-        PriceCategoryId: usedPriceCategoryId,
+        PriceCategoryId: dealer.PriceCategoryId,
         FulfillmentStatus: fulfillmentStatus,
         TaxId: tax?.Id ?? null,
       });
