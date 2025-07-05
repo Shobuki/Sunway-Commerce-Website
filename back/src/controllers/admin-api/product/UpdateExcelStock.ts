@@ -8,6 +8,30 @@ import multer from "multer";
 
 const prisma = new PrismaClient();
 
+function formatDateForFilename(date: Date) {
+  // Misal: 2024-07-05 20.35.55
+  return date
+    .toISOString()
+    .replace(/T/, ' ')
+    .replace(/\..+/, '')
+    .replace(/:/g, '.');
+}
+
+function formatDateForFilenameJakarta(date: Date) {
+  // Offset Jakarta UTC+7
+  const jakartaOffsetMs = 7 * 60 * 60 * 1000;
+  const jakarta = new Date(date.getTime() + jakartaOffsetMs);
+
+  const yyyy = jakarta.getFullYear();
+  const mm = String(jakarta.getMonth() + 1).padStart(2, '0');
+  const dd = String(jakarta.getDate()).padStart(2, '0');
+  const HH = String(jakarta.getHours()).padStart(2, '0');
+  const MM = String(jakarta.getMinutes()).padStart(2, '0');
+  const SS = String(jakarta.getSeconds()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd} ${HH}.${MM}.${SS}`;
+}
+
+
 class WarehouseStock {
   // Konfigurasi Multer
   upload = multer({ storage: multer.memoryStorage() });
@@ -20,6 +44,7 @@ class WarehouseStock {
       .trim();
   };
 
+
   updateStockFromExcel = async (req: Request, res: Response) => {
     try {
       const file = req.file;
@@ -27,13 +52,13 @@ class WarehouseStock {
         res.status(400).json({ message: "Excel file is required." });
         return;
       }
-
-      const timestamp = Date.now();
+      const tempFilename = `stock_temp_${Date.now()}.xlsx`;
       const uploadDir = path.join(__dirname, '../../uploads/excel');
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
-      const filePath = path.join(uploadDir, `stock_${timestamp}.xlsx`);
+      // Ganti penamaan file:
+      const filePath = path.join(uploadDir, tempFilename);
       fs.writeFileSync(filePath, file.buffer);
 
       const workbook = XLSX.read(file.buffer, { type: "buffer" });
@@ -420,6 +445,36 @@ class WarehouseStock {
           }
         }
       }
+      // Ambil Admin dan waktu dari stockHistory log
+      const historyWithAdmin = await prisma.stockHistory.findFirst({
+        where: { UploadLogId: uploadLog.Id },
+        include: { Admin: true },
+      });
+
+      function pad2(val: number | string): string { return String(val).padStart(2, "0"); }
+      function formatDateLikeStockHistory(date: Date): string {
+        const yyyy = date.getFullYear();
+        const mm = pad2(date.getMonth() + 1);
+        const dd = pad2(date.getDate());
+        const HH = pad2(date.getHours());
+        const MM = pad2(date.getMinutes());
+        const SS = pad2(date.getSeconds());
+        return `${yyyy}-${mm}-${dd} ${HH}.${MM}.${SS}`;
+      }
+
+      const adminName = (historyWithAdmin?.Admin?.Name || "unknown").replace(/\s+/g, '_');
+      const wkt = formatDateLikeStockHistory(historyWithAdmin?.UpdatedAt || new Date());
+      const finalFilename = `stock_${adminName} ${wkt}.xlsx`;
+      const finalFilePath = path.join(uploadDir, finalFilename);
+
+      // Rename file temp ke nama final
+      fs.renameSync(filePath, finalFilePath);
+
+      // Update FilePath di uploadLog
+      await prisma.stockHistoryExcelUploadLog.update({
+        where: { Id: uploadLog.Id },
+        data: { FilePath: finalFilePath }
+      });
 
       res.json({
         success: true,
