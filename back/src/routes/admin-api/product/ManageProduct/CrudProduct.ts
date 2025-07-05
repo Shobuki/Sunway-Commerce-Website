@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { adminAuth, authorizeMenuAccess, authorizeMenuFeatureAccess } from "../../../../middlewares/admin/auth"
+import {importProductFromPDF} from "../../../../controllers/admin-api/product/importproduct";
 import {
   getAllProducts,
   getProductCategoriesWithProducts,
@@ -74,7 +75,7 @@ const router = Router();
 //router.use(authenticateSuperAdmin);
 
 
-
+router.post("/import-product-pdf", importProductFromPDF);
 //Product Routes
 router.post(
   "/products/main",

@@ -166,6 +166,18 @@ class ProductImage {
         return;
       }
 
+      // === Hapus file fisik dari komputer ===
+      const imagePath = path.join(IMAGE_DIRECTORY, imageRecord.Image);
+      if (fs.existsSync(imagePath)) {
+        try {
+          fs.unlinkSync(imagePath); // SINKRON agar langsung hilang, atau pakai unlinkAsync
+          console.log(`Deleted image file from disk: ${imagePath}`);
+        } catch (fileError) {
+          // Optional: Catat error, lanjutkan proses soft delete
+          console.error(`Failed to delete image file: ${imagePath}`, fileError);
+        }
+      }
+
       // Soft delete dengan mengisi DeletedAt
       await prisma.productImage.update({
         where: { Id: imageId },
@@ -175,9 +187,10 @@ class ProductImage {
       });
 
       console.log(`Soft deleted image record from database with Id: ${imageId}`);
-      res.status(200).json({ message: "Product image marked as deleted (soft delete)." });
+      res.status(200).json({ message: "Product image deleted successfully." });
+
     } catch (error) {
-      console.error("Error marking product image as deleted:", error);
+      console.error("Error deleting product image:", error);
       res.status(500).json({ error: "Internal Server Error" });
     }
   };

@@ -42,27 +42,30 @@ class WarehouseStock {
 
       const allItemCodes = await prisma.itemCode.findMany({
         where: { DeletedAt: null },
-        select: { Id: true, Name: true }
+        select: { Id: true, Name: true, PartNumberId: true }
       });
+
 
       const allWarehouses = await prisma.warehouse.findMany({
         where: { DeletedAt: null },
         select: { Id: true, BusinessUnit: true }
       });
-      
+
       const adminId = req.admin?.Id || null;
-      
+
       const uploadLog = await prisma.stockHistoryExcelUploadLog.create({
-  data: {
-    FilePath: filePath,
-    CreatedAt: new Date(),
-  },
-});
+        data: {
+          FilePath: filePath,
+          CreatedAt: new Date(),
+        },
+      });
 
 
       const updatedItems: any[] = [];
       const updatedPOs: any[] = [];
       const failedUpdates: any[] = [];
+
+      const qtyPOMap = new Map<string, number>();
 
       for (const [index, row] of sheetData.entries()) {
         try {
@@ -79,13 +82,64 @@ class WarehouseStock {
           const normalizedItemCode = this.normalizeString(excelItemCode);
           const qtyOnHand = Number(rawQtyOnHand) || 0;
           const qtyPO = Number(rawQtyPO) || 0;
+          qtyPOMap.set(normalizedItemCode, qtyPO);
 
-          const matchedItem = allItemCodes.find(item =>
+          let matchedItem = allItemCodes.find(item =>
             this.normalizeString(item.Name) === normalizedItemCode
           );
 
           if (!matchedItem) {
-            failedUpdates.push({ row: index + 2, item: excelItemCode, reason: "ItemCode not found" });
+            // 🔎 CARI PARTNUMBER yang mirip prefix
+            const allPartNumbers = await prisma.partNumber.findMany({
+              where: { DeletedAt: null },
+              select: { Id: true, Name: true }
+            });
+
+            const foundPart = allPartNumbers.find(pn =>
+              this.normalizeString(pn.Name) &&
+              normalizedItemCode.startsWith(this.normalizeString(pn.Name))
+            );
+
+            if (foundPart) {
+              // Buatkan itemcode baru dan konekkan ke partnumber tsb
+              const created = await prisma.itemCode.create({
+                data: {
+                  Name: excelItemCode,
+                  PartNumberId: foundPart.Id,
+                  CreatedAt: new Date(),
+                }
+              });
+              allItemCodes.push({ Id: created.Id, Name: created.Name, PartNumberId: foundPart.Id });
+              matchedItem = created;
+            }
+          }
+          if (matchedItem && !matchedItem.PartNumberId) {
+            // PATCH: jika itemcode belum punya PartNumberId, coba cari dari prefix
+            const allPartNumbers = await prisma.partNumber.findMany({
+              where: { DeletedAt: null },
+              select: { Id: true, Name: true }
+            });
+
+            const foundPart = allPartNumbers.find(pn =>
+              this.normalizeString(pn.Name) &&
+              normalizedItemCode.startsWith(this.normalizeString(pn.Name))
+            );
+
+            if (foundPart) {
+              await prisma.itemCode.update({
+                where: { Id: matchedItem.Id },
+                data: { PartNumberId: foundPart.Id }
+              });
+              // Update juga di allItemCodes supaya cache ID nya ikut update
+              const idx = allItemCodes.findIndex(it => it.Id === matchedItem.Id);
+              if (idx !== -1) allItemCodes[idx].PartNumberId = foundPart.Id;
+              matchedItem.PartNumberId = foundPart.Id;
+            }
+          }
+
+
+          if (!matchedItem) {
+            failedUpdates.push({ row: index + 2, item: excelItemCode, reason: "ItemCode not found and no matching PartNumber" });
             continue;
           }
 
@@ -149,37 +203,7 @@ class WarehouseStock {
               });
             }
 
-            if (qtyPO !== beforeQtyPO) {
-              await prisma.itemCode.update({
-                where: { Id: matchedItem.Id },
-                data: {
-                  QtyPO: qtyPO
-                }
-              });
 
-              // ✅ Tambahkan ini:
-              await prisma.stockHistory.create({
-                data: {
-                  WarehouseStockId: null,
-                  ItemCodeId: matchedItem.Id,
-                  QtyBefore: beforeQtyPO,
-                  QtyAfter: qtyPO,
-                  Note: "QtyPO updated from Excel",
-                  UpdatedAt: new Date(),
-                  UploadLogId: uploadLog.Id,
-                  AdminId: adminId,
-                }
-              });
-
-              updatedPOs.push({
-                itemCode: excelItemCode,
-                businessUnit,
-                beforeQtyPO,
-                afterQtyPO: qtyPO
-              });
-
-              noteParts.push(`QtyPO changed from ${beforeQtyPO} to ${qtyPO}`);
-            }
 
             if (qtyOnHand !== beforeQty) {
               updatedItems.push({
@@ -233,7 +257,40 @@ class WarehouseStock {
           failedUpdates.push({ row: index + 2, reason: `Error: ${(innerError as Error).message}` });
         }
       }
+      for (const [normItemCode, qtyPO] of qtyPOMap.entries()) {
+        const itemCodeObj = allItemCodes.find(ic => this.normalizeString(ic.Name) === normItemCode);
+        if (!itemCodeObj) continue;
 
+        const beforeItemCode = await prisma.itemCode.findUnique({
+          where: { Id: itemCodeObj.Id },
+          select: { QtyPO: true }
+        });
+        const beforeQtyPO = beforeItemCode?.QtyPO ?? 0;
+
+        if (beforeQtyPO !== qtyPO) {
+          await prisma.itemCode.update({
+            where: { Id: itemCodeObj.Id },
+            data: { QtyPO: qtyPO }
+          });
+          await prisma.stockHistory.create({
+            data: {
+              WarehouseStockId: null,
+              ItemCodeId: itemCodeObj.Id,
+              QtyBefore: beforeQtyPO,
+              QtyAfter: qtyPO,
+              Note: "QtyPO updated from Excel (global)",
+              UpdatedAt: new Date(),
+              UploadLogId: uploadLog.Id,
+              AdminId: adminId,
+            }
+          });
+          updatedPOs.push({
+            itemCode: itemCodeObj.Name,
+            beforeQtyPO,
+            afterQtyPO: qtyPO
+          });
+        }
+      }
       // 🔁 Ambil semua ItemCode dari Excel dalam bentuk normalisasi
       const itemCodesInExcel = new Set<string>(
         sheetData

@@ -77,6 +77,21 @@ class WarehouseStock {
       const totalData = await prisma.product.count({
         where: {
           DeletedAt: null,
+          Name: filterProduct ? { contains: filterProduct as string, mode: "insensitive" } : undefined,
+          PartNumber: {
+            some: {
+              DeletedAt: null,
+              Name: filterPartNumber ? { contains: filterPartNumber as string, mode: "insensitive" } : undefined,
+              ItemCode: filterItemCode
+                ? {
+                  some: {
+                    DeletedAt: null,
+                    Name: { contains: filterItemCode as string, mode: "insensitive" },
+                  },
+                }
+                : undefined,
+            },
+          },
         },
       });
 
@@ -103,12 +118,47 @@ class WarehouseStock {
       return;
     }
 
-    if (!ItemCodeId || !WarehouseId) {
-      res.status(400).json({ message: "ItemCodeId and WarehouseId required" });
+    if (!ItemCodeId) {
+      res.status(400).json({ message: "ItemCodeId required" });
       return;
     }
 
-    // QtyOnHand validation
+
+    // ==== HANDLE PO SAJA (TANPA WAREHOUSE) ====
+    if (!WarehouseId && QtyPO !== undefined) {
+      const before = await prisma.itemCode.findUnique({
+        where: { Id: ItemCodeId },
+        select: { QtyPO: true }
+      });
+
+      if (before?.QtyPO !== QtyPO) {
+        await prisma.itemCode.update({
+          where: { Id: ItemCodeId },
+          data: { QtyPO },
+        });
+        await prisma.stockHistory.create({
+          data: {
+            WarehouseStockId: null,
+            ItemCodeId,
+            QtyBefore: before?.QtyPO,
+            QtyAfter: QtyPO,
+            Note: "QtyPO updated manually",
+            UpdatedAt: new Date(),
+            AdminId: adminId,
+          },
+        });
+      }
+      res.status(200).json({ message: "QtyPO updated successfully" });
+      return;
+    }
+
+    // ===== HANDLE UPDATE STOCK (WAJIB WarehouseId) =====
+    if (!WarehouseId) {
+      res.status(400).json({ message: "WarehouseId required for stock update" });
+      return;
+    }
+
+    // ---- VALIDASI QTYONHAND HANYA UNTUK UPDATE STOCK WAREHOUSE
     const qtyOnHandNum = Number(QtyOnHand);
     if (
       isNaN(qtyOnHandNum) ||
@@ -119,7 +169,7 @@ class WarehouseStock {
       return;
     }
 
-    // QtyPO validation (optional, if provided)
+    // ---- VALIDASI QTYPO JIKA DIKIRIM (opsional)
     if (QtyPO !== undefined && QtyPO !== null) {
       const qtyPONum = Number(QtyPO);
       if (isNaN(qtyPONum) || qtyPONum < 0 || qtyPONum > 1e15) {
@@ -207,49 +257,6 @@ class WarehouseStock {
             },
           });
         }
-      }
-
-      // ==== HANDLE PO ====
-      if (QtyPO !== beforeQtyPO) {
-        await prisma.$transaction(async (tx) => {
-          const before = await tx.itemCode.findUnique({
-            where: { Id: ItemCodeId },
-            select: { QtyPO: true }
-          });
-
-          if (before?.QtyPO !== QtyPO) {
-            await tx.itemCode.update({
-              where: { Id: ItemCodeId },
-              data: { QtyPO },
-            });
-
-            const exists = await tx.stockHistory.findFirst({
-              where: {
-                ItemCodeId,
-                Note: "QtyPO updated manually",
-                QtyBefore: before?.QtyPO,
-                QtyAfter: QtyPO,
-                UpdatedAt: {
-                  gte: new Date(Date.now() - 3000),
-                },
-              },
-            });
-
-            if (!exists) {
-              await tx.stockHistory.create({
-                data: {
-                  WarehouseStockId: null,
-                  ItemCodeId,
-                  QtyBefore: before?.QtyPO,
-                  QtyAfter: QtyPO,
-                  Note: "QtyPO updated manually",
-                  UpdatedAt: new Date(),
-                  AdminId: adminId,
-                },
-              });
-            }
-          }
-        });
       }
 
       res.status(200).json({ message: "Stock updated successfully" });

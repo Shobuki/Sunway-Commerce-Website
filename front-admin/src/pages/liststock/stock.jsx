@@ -38,6 +38,12 @@ const Stock = () => {
     const [selectedItemCode, setSelectedItemCode] = useState(null);
     const [shouldRefreshStock, setShouldRefreshStock] = useState(false);
 
+    const [page, setPage] = useState(1);
+    const perPage = 20; // Bisa diset berapa banyak baris per halaman
+
+
+
+
     useEffect(() => {
         axios.get("/api/admin/admin/access/my-menu")
             .then((res) => {
@@ -81,6 +87,10 @@ const Stock = () => {
     useEffect(() => {
         fetchStockData();
     }, [sortBy]); // ✅ Fetch ulang saat sortBy berubah
+
+    useEffect(() => {
+        setPage(1);
+    }, [searchTerm, selectedCategory, selectedProduct, selectedPartNumber, sortBy]);
 
     // ✅ Dapatkan semua item code yang unik dari data stock
     const allItemCodes = [
@@ -146,7 +156,17 @@ const Stock = () => {
 
 
 
-
+    const sortedProducts = filteredProducts.slice().sort((a, b) => {
+        // Cari partnumber dengan ItemCode
+        const aHasItemCode = a.PartNumber.some(pn => pn.ItemCode && pn.ItemCode.length > 0);
+        const bHasItemCode = b.PartNumber.some(pn => pn.ItemCode && pn.ItemCode.length > 0);
+        // true duluan
+        return (aHasItemCode === bHasItemCode) ? 0 : aHasItemCode ? -1 : 1;
+    });
+    // Untuk menghitung hasil akhir paginasi
+    const totalRows = sortedProducts.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / perPage));
+    const paginatedProducts = sortedProducts.slice((page - 1) * perPage, page * perPage);
 
     // ✅ Ambil daftar kategori unik dari produk
     const categories = [
@@ -547,7 +567,7 @@ const Stock = () => {
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredProducts.map((product) => (
+                        {paginatedProducts.map((product) => (
                             <React.Fragment key={product.Id}>
                                 <tr className="bg-blue-50 font-semibold">
                                     <td className="px-6 py-4 whitespace-nowrap">
@@ -618,6 +638,38 @@ const Stock = () => {
                         ))}
                     </tbody>
                 </table>
+                <div className="flex justify-between items-center py-3">
+                    <div>
+                        Showing {Math.min((page - 1) * perPage + 1, totalRows)}
+                        {"–"}
+                        {Math.min(page * perPage, totalRows)}
+                        {" of "}
+                        {totalRows}
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            className="px-2 py-1 border rounded disabled:opacity-40"
+                            disabled={page === 1}
+                            onClick={() => setPage(1)}
+                        >{"<<"}</button>
+                        <button
+                            className="px-2 py-1 border rounded disabled:opacity-40"
+                            disabled={page === 1}
+                            onClick={() => setPage(page - 1)}
+                        >{"<"}</button>
+                        <span className="px-2 py-1">{page}/{totalPages}</span>
+                        <button
+                            className="px-2 py-1 border rounded disabled:opacity-40"
+                            disabled={page === totalPages}
+                            onClick={() => setPage(page + 1)}
+                        >{">"}</button>
+                        <button
+                            className="px-2 py-1 border rounded disabled:opacity-40"
+                            disabled={page === totalPages}
+                            onClick={() => setPage(totalPages)}
+                        >{">>"}</button>
+                    </div>
+                </div>
             </div>
             {selectedItem && (
                 <EditStock

@@ -164,37 +164,6 @@ class ItemCode {
       }
 
 
-      // CARI itemcode dengan nama sama (case-insensitive), apapun DeletedAt-nya
-      const existing = await prisma.itemCode.findFirst({
-        where: {
-          Name: { equals: Name, mode: "insensitive" },
-        }
-      });
-
-      if (existing) {
-        // Reactivate & update field
-        const updated = await prisma.itemCode.update({
-          where: { Id: existing.Id },
-          data: {
-            PartNumberId: Number(PartNumberId),
-            Name,
-            BrandCodeId: BrandCodeId ? Number(BrandCodeId) : null,
-            OEM,
-            Weight: Weight ? parseFloat(Weight) : null,
-            QtyPO: null,
-            AllowItemCodeSelection: Boolean(AllowItemCodeSelection),
-            MinOrderQuantity: MinOrderQuantity ? Number(MinOrderQuantity) : null,
-            OrderStep: OrderStep ? Number(OrderStep) : null,
-            DeletedAt: null,
-          }
-        });
-        res.status(200).json({
-          message: "ItemCode already exists and has been reactivated/updated.",
-          data: updated
-        });
-        return;
-      }
-
       const newItemCode = await prisma.itemCode.create({
         data: {
           PartNumberId: Number(PartNumberId),

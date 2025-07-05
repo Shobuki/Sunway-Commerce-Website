@@ -18,23 +18,23 @@ const EditStock = ({ item, onClose, onSave }) => {
   const [loadingAccess, setLoadingAccess] = useState(true);
   const [menuAccess, setMenuAccess] = useState(null);
 
- useEffect(() => {
-        axios.get("/api/admin/admin/access/my-menu")
-            .then((res) => {
-                const access = (res.data || []).find(
-                    (m) => m.Name?.toLowerCase() === "stock"
-                );
-                setMenuAccess(access || null);
-                setLoadingAccess(false);
-                if (!access) setTimeout(() => window.location.href = "/access-denied", 0);
-            })
-            .catch(() => {
-                setMenuAccess(null);
-                setLoadingAccess(false);
-                setTimeout(() => window.location.href = "/access-denied", 0);
-            });
-    }, []);
-    
+  useEffect(() => {
+    axios.get("/api/admin/admin/access/my-menu")
+      .then((res) => {
+        const access = (res.data || []).find(
+          (m) => m.Name?.toLowerCase() === "stock"
+        );
+        setMenuAccess(access || null);
+        setLoadingAccess(false);
+        if (!access) setTimeout(() => window.location.href = "/access-denied", 0);
+      })
+      .catch(() => {
+        setMenuAccess(null);
+        setLoadingAccess(false);
+        setTimeout(() => window.location.href = "/access-denied", 0);
+      });
+  }, []);
+
   useEffect(() => {
     const fetchWarehouses = async () => {
       try {
@@ -81,12 +81,19 @@ const EditStock = ({ item, onClose, onSave }) => {
     setIsSubmitting(true);
 
     try {
+      // 1. Update QtyPO (hanya sekali, tanpa WarehouseId)
+      await axios.put(`/api/admin/admin/products/stock`, {
+        ItemCodeId: item.Id,
+        QtyPO: qtyPO,
+      });
+
+      // 2. Update stok per warehouse (tanpa QtyPO, hanya QtyOnHand)
       const updatePromises = warehouseStocks.map(ws =>
         axios.put(`/api/admin/admin/products/stock`, {
           ItemCodeId: item.Id,
           WarehouseId: ws.WarehouseId,
           QtyOnHand: ws.QtyOnHand,
-          QtyPO: qtyPO,
+          // Jangan kirim QtyPO di sini!
         })
       );
       await Promise.all(updatePromises);
