@@ -106,31 +106,81 @@ class Product {
       const limit = 20;
       const offset = (Number(page) - 1) * limit;
 
-      const products = await prisma.product.findMany({
+      // 1. Ambil SEMUA produk tanpa kategori (tidak pakai skip/take)
+      const productsNoCategory = await prisma.product.findMany({
         where: {
           DeletedAt: null,
           Name: { contains: String(search), mode: "insensitive" },
+          ProductCategory: { none: {} }
         },
         include: {
           ProductImage: true,
           PartNumber: true,
+          ProductCategory: true,
         },
-        skip: offset,
-        take: limit,
         orderBy: { Name: sort === "desc" ? "desc" : "asc" },
       });
 
-      const totalProducts = await prisma.product.count({
+      // 2. Hitung total produk TANPA kategori
+      const countNoCategory = await prisma.product.count({
         where: {
           DeletedAt: null,
           Name: { contains: String(search), mode: "insensitive" },
+          ProductCategory: { none: {} }
         },
       });
 
+      // 3. Hitung total produk DENGAN kategori
+      const countWithCategory = await prisma.product.count({
+        where: {
+          DeletedAt: null,
+          Name: { contains: String(search), mode: "insensitive" },
+          ProductCategory: { some: {} }
+        },
+      });
+
+      // 4. Sisakan slot dari paginasi untuk produk berkategori
+      const sisaSlot = limit - productsNoCategory.length;
+
+      // 5. Ambil produk dengan kategori sesuai slot & paginasi
+      let productsWithCategory: any[] = [];
+      if (sisaSlot > 0) {
+        productsWithCategory = await prisma.product.findMany({
+          where: {
+            DeletedAt: null,
+            Name: { contains: String(search), mode: "insensitive" },
+            ProductCategory: { some: {} }
+          },
+          include: {
+            ProductImage: true,
+            PartNumber: true,
+            ProductCategory: true,
+          },
+          skip: offset > 0 ? Math.max(0, offset - countNoCategory) : 0, // jika offset lebih kecil dari jumlah tanpa kategori, skip 0
+          take: sisaSlot,
+          orderBy: { Name: sort === "desc" ? "desc" : "asc" },
+        });
+      }
+
+      // 6. Gabung dan tandai StatusParent
+      const withStatus = (arr: any[], status: boolean) => arr.map(product => ({
+        ...product,
+        StatusParent: status
+      }));
+
+      const result = [
+        ...withStatus(productsNoCategory, false),
+        ...withStatus(productsWithCategory, true)
+      ];
+
+      // Total produk = tanpa kategori + dengan kategori
+      const totalProducts = countNoCategory + countWithCategory;
+      const totalPages = Math.ceil(totalProducts / limit);
+
       res.status(200).json({
-        data: products,
+        data: result,
         total: totalProducts,
-        totalPages: Math.ceil(totalProducts / limit),
+        totalPages,
         currentPage: Number(page),
       });
     } catch (error) {
@@ -148,11 +198,18 @@ class Product {
         return;
       }
 
+      // Ambil Product beserta ProductCategory (dan info parent dari category)
       const product = await prisma.product.findFirst({
         where: { Id: parseInt(Id, 10), DeletedAt: null },
         include: {
           ProductImage: true,
           PartNumber: true,
+          ProductCategory: {
+            include: {
+              // Ambil parent dari productcategory, bisa null
+              ParentCategory: true
+            }
+          }
         },
       });
 
@@ -161,7 +218,20 @@ class Product {
         return;
       }
 
-      res.status(200).json({ data: product });
+      // StatusParent: true jika sudah ada kategori, false jika belum
+      const StatusParent = !!(product.ProductCategory && product.ProductCategory.length > 0);
+
+      // Ambil parent dari masing-masing ProductCategory yang terhubung
+      // (kalau single category, bisa ambil [0])
+      const parentCategories = (product.ProductCategory || []).map(pc => pc.ParentCategory).filter(Boolean);
+
+      res.status(200).json({
+        data: {
+          ...product,
+          StatusParent,
+          ParentCategories: parentCategories // Array of parent category, bisa kosong
+        }
+      });
     } catch (error) {
       console.error("Error fetching product by ID:", error);
       res.status(500).json({ error: "Internal Server Error" });
@@ -189,8 +259,8 @@ class Product {
         res.status(400).json({ message: "CodeName must be max 50 characters." });
         return;
       }
-      if (Description !== undefined && (typeof Description !== "string" || Description.length > 800)) {
-        res.status(400).json({ message: "Description must be max 800 characters." });
+      if (Description !== undefined && (typeof Description !== "string" || Description.length > 7000)) {
+        res.status(400).json({ message: "Description must be max 7000 characters." });
         return;
       }
 
@@ -213,19 +283,17 @@ class Product {
 
   updateProduct = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { id, Name, CodeName, Description } = req.body;
+      const { id, Name, CodeName, Description, ProductCategoryIds } = req.body;
 
+      // ===== VALIDASI =====
       if (!id || isNaN(Number(id))) {
         res.status(400).json({ message: "Invalid Product ID." });
         return;
       }
-
       if (!Name || Name.trim() === "") {
         res.status(400).json({ message: "Product Name is required." });
         return;
       }
-
-      // VALIDATION
       if (Name !== undefined && (typeof Name !== "string" || Name.length > 80)) {
         res.status(400).json({ message: "Name must be max 80 characters." });
         return;
@@ -234,24 +302,62 @@ class Product {
         res.status(400).json({ message: "CodeName must be max 50 characters." });
         return;
       }
-      if (Description !== undefined && (typeof Description !== "string" || Description.length > 800)) {
-        res.status(400).json({ message: "Description must be max 800 characters." });
+      if (Description !== undefined && (typeof Description !== "string" || Description.length > 7000)) {
+        res.status(400).json({ message: "Description must be max 7000 characters." });
         return;
       }
 
+      // Validasi ProductCategoryIds jika dikirim
+      let categoriesToConnect: number[] = [];
+      if (ProductCategoryIds !== undefined) {
+        if (!Array.isArray(ProductCategoryIds)) {
+          res.status(400).json({ message: "ProductCategoryIds harus array." });
+          return;
+        }
+        if (!ProductCategoryIds.every((catId: any) => typeof catId === "number" || /^\d+$/.test(String(catId)))) {
+          res.status(400).json({ message: "Semua ProductCategoryIds harus angka." });
+          return;
+        }
+        categoriesToConnect = ProductCategoryIds.map((catId: any) => parseInt(catId, 10));
+      }
 
+      // ===== UPDATE DATA UTAMA =====
       const dataToUpdate: any = { Name };
-
       if (CodeName !== undefined) dataToUpdate.CodeName = CodeName;
       if (Description !== undefined) dataToUpdate.Description = Description;
 
       const updatedProduct = await prisma.product.update({
         where: { Id: parseInt(id, 10) },
         data: dataToUpdate,
-        include: { PartNumber: true },
+        include: { PartNumber: true, ProductImage: true, ProductCategory: true },
       });
 
-      res.status(200).json({ message: "Product updated successfully", data: updatedProduct });
+      // ===== UPDATE RELASI CATEGORY (JIKA DIKIRIM) =====
+      if (categoriesToConnect.length > 0) {
+        await prisma.product.update({
+          where: { Id: updatedProduct.Id },
+          data: {
+            ProductCategory: {
+              set: categoriesToConnect.map((catId) => ({ Id: catId })),
+            },
+          },
+        });
+      }
+
+      // ===== FETCH LAGI PRODUCT DENGAN RELASI KATEGORI TERBARU =====
+      const productWithCategory = await prisma.product.findUnique({
+        where: { Id: updatedProduct.Id },
+        include: {
+          PartNumber: true,
+          ProductImage: true,
+          ProductCategory: true,
+        },
+      });
+
+      res.status(200).json({
+        message: "Product updated successfully",
+        data: productWithCategory,
+      });
     } catch (error) {
       console.error("Error updating product:", error);
       res.status(500).json({ error: "Internal Server Error" });

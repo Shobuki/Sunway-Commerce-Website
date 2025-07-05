@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import dynamic from "next/dynamic";
+import ModalAssignCategory from "../detail/ModalAssignCategory"; // pastikan path sudah benar
+
 
 // Import ReactQuill secara dinamis agar tidak error di SSR
 const ReactQuill = dynamic(() => import("react-quill"), { ssr: false });
@@ -16,6 +18,30 @@ const ProductEditModal = ({ isOpen, onClose, onSave, product }) => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+
+  // Simpan ProductCategoryIds yang sedang di-assign (buat initial value agar konsisten)
+  const [categoryIds, setCategoryIds] = useState([]);
+
+ const [categoryId, setCategoryId] = useState(null);
+const [categoryObj, setCategoryObj] = useState(null);   // Nama kategori
+
+
+  useEffect(() => {
+  if (isOpen && product) {
+    setFormData({
+      id: product.Id,
+      Name: product.Name || "",
+      CodeName: product.CodeName || "",
+      Description: product.Description || "",
+    });
+
+    // Ambil ID & Nama category dari product (jika ada)
+    const cat = (product.ProductCategory && product.ProductCategory[0]) || null;
+    setCategoryId(cat ? cat.Id : null);
+    setCategoryObj(cat ? { Id: cat.Id, Name: cat.Name } : null);
+  }
+}, [isOpen, product]);
 
   useEffect(() => {
     if (isOpen && product) {
@@ -25,6 +51,7 @@ const ProductEditModal = ({ isOpen, onClose, onSave, product }) => {
         CodeName: product.CodeName || "",
         Description: product.Description || "",
       });
+      setCategoryIds(product.ProductCategory?.map((cat) => cat.Id) || []);
     }
   }, [isOpen, product]);
 
@@ -42,7 +69,10 @@ const ProductEditModal = ({ isOpen, onClose, onSave, product }) => {
     setError("");
 
     try {
-      await axios.put("/api/admin/admin/products/main", formData);
+      await axios.put("/api/admin/admin/products/main", {
+        ...formData,
+        ProductCategoryIds: categoryIds,  // ← penting!
+      });
       onSave();
       onClose();
     } catch (err) {
@@ -94,6 +124,32 @@ const ProductEditModal = ({ isOpen, onClose, onSave, product }) => {
             </div>
 
           </div>
+          <div>
+  <label className="block font-medium mb-1">Category</label>
+  <div className="flex items-center gap-2">
+    {product.ProductCategory && product.ProductCategory.length > 0 ? (
+      <span className="text-gray-700">
+        {product.ProductCategory
+          .map(
+            (cat) =>
+              cat.ParentCategory
+                ? `${cat.Name} (${cat.ParentCategory.Name})`
+                : cat.Name
+          )
+          .join(", ")}
+      </span>
+    ) : (
+      <span className="italic text-gray-400">No category assigned</span>
+    )}
+    <button
+      type="button"
+      className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
+      onClick={() => setIsAssignModalOpen(true)}
+    >
+      Assign Category
+    </button>
+  </div>
+</div>
         </div>
         <div className="flex justify-end mt-4 gap-3">
           <button
@@ -111,6 +167,19 @@ const ProductEditModal = ({ isOpen, onClose, onSave, product }) => {
           </button>
         </div>
       </div>
+      <ModalAssignCategory
+        isOpen={isAssignModalOpen}
+        onClose={() => setIsAssignModalOpen(false)}
+        productId={formData.id}
+        initialCategoryId={categoryIds[0] || null}
+        productName={formData.Name}
+        productDescription={formData.Description}
+        productCodeName={formData.CodeName}
+        onSuccess={(newCategoryId) => {
+          setCategoryIds([newCategoryId]);
+          setIsAssignModalOpen(false);
+        }}
+      />
     </div>
   );
 };

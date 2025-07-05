@@ -128,17 +128,29 @@ const FilterPopup = ({
               <input name="endDate" type="date" className="border px-3 py-2 rounded w-full" value={filters.endDate} onChange={handleInputChange} />
             </div>
 
-            <div className="lg:col-span-3">
-              <label className="block font-semibold mb-1 text-sm">Pencarian</label>
-              <input
-                name="q"
-                type="text"
-                placeholder="Cari kode/item/admin..."
-                className="border px-3 py-2 rounded w-full"
-                value={filters.q}
-                onChange={handleInputChange}
-              />
-            </div>
+            <div className="lg:col-span-3 flex gap-2">
+  <select
+    name="searchType"
+    className="border px-2 py-2 rounded min-w-[120px]"
+    value={filters.searchType}
+    onChange={handleInputChange}
+    style={{ flex: "0 0 auto" }}
+  >
+    <option value="">Semua</option>
+    <option value="itemcode">Item Code</option>
+    <option value="product">Produk</option>
+    <option value="admin">Admin</option>
+    <option value="note">Note</option>
+  </select>
+  <input
+    name="q"
+    type="text"
+    placeholder="Cari kode/item/admin..."
+    className="border px-3 py-2 rounded w-full"
+    value={filters.q}
+    onChange={handleInputChange}
+  />
+</div>
           </div>
 
           {/* Tombol Aksi di dalam Popup */}
@@ -193,6 +205,7 @@ const StockHistory = () => {
     startDate: "",
     endDate: "",
     changeTarget: "",
+    searchType: "",
   };
   const [filters, setFilters] = useState(initialFilterState);
 

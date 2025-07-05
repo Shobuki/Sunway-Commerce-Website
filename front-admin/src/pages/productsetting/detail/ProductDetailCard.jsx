@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import ModalAssignCategory from "./ModalAssignCategory"; // Path ke file modal assign kategori
 import axios from "axios";
 
 // Helper untuk ikon sederhana (opsional, tapi direkomendasikan)
@@ -36,6 +37,7 @@ const ProductDetailCard = ({ product, onSaveSuccess, onClose }) => {
   const [editedProduct, setEditedProduct] = useState({ ...product });
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -94,6 +96,7 @@ const ProductDetailCard = ({ product, onSaveSuccess, onClose }) => {
             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition duration-150"
           ></textarea>
         </div>
+        
 
         <div className="flex justify-end space-x-3 pt-3 sm:pt-4">
             <button

@@ -105,27 +105,28 @@ class ProductCategory {
   };
 
   getAllProductCategories = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const categories = await prisma.productCategory.findMany({
-        where: {
-          DeletedAt: null,
-        },
-        include: {
-          SubCategories: {
-            where: {
-              DeletedAt: null,
-            },
+  try {
+    const categories = await prisma.productCategory.findMany({
+      where: {
+        DeletedAt: null,
+      },
+      include: {
+        SubCategories: {
+          where: {
+            DeletedAt: null,
           },
-          Products: true,
         },
-      });
+        Products: true,
+        ParentCategory: true, // ← Tambahkan ini untuk include parent
+      },
+    });
 
-      res.status(200).json({ data: categories });
-    } catch (error) {
-      console.error("Error fetching ProductCategories:", error);
-      next(error);
-    }
-  };
+    res.status(200).json({ data: categories });
+  } catch (error) {
+    console.error("Error fetching ProductCategories:", error);
+    next(error);
+  }
+};
 
   getCategoryWithHierarchy = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { Id } = req.params;

@@ -46,21 +46,21 @@ const ItemCodeListAll = () => {
     setProductSearch(searchTerm);
 
     const filtered = products
-        .map((product) => {
-            const filteredItemCodes = product.ItemCode.filter((item) =>
-                item.Name.toLowerCase().includes(searchTerm) ||
-                item.OEM.toLowerCase().includes(searchTerm)
-            );
+      .map((product) => {
+        const filteredItemCodes = product.ItemCode.filter((item) =>
+          (item.Name || "").toLowerCase().includes(searchTerm) ||
+          (item.OEM || "").toLowerCase().includes(searchTerm)
+        );
 
-            // Jika tidak ada `ItemCode` yang cocok, hapus produk dari hasil pencarian
-            if (filteredItemCodes.length === 0) return null;
+        // Jika tidak ada `ItemCode` yang cocok, hapus produk dari hasil pencarian
+        if (filteredItemCodes.length === 0) return null;
 
-            return { ...product, ItemCode: filteredItemCodes };
-        })
-        .filter(Boolean); // Hapus produk yang tidak memiliki ItemCode yang cocok
+        return { ...product, ItemCode: filteredItemCodes };
+      })
+      .filter(Boolean); // Hapus produk yang tidak memiliki ItemCode yang cocok
 
     setFilteredProducts(filtered);
-};
+  };
 
 
   const handleEditClick = (id) => {

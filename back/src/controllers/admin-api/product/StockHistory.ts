@@ -107,16 +107,37 @@ class StockHistory {
 
       // Search q (itemcode, product, admin, note)
       let ORsearch: any[] = [];
-      if (q) {
-        const qstr = q as string;
-        ORsearch = [
-          { ItemCode: { Name: { contains: qstr, mode: "insensitive" } } },
-          { Note: { contains: qstr, mode: "insensitive" } },
-          { Admin: { Username: { contains: qstr, mode: "insensitive" } } },
-          { Admin: { Name: { contains: qstr, mode: "insensitive" } } },
-          { ItemCode: { PartNumber: { Product: { Name: { contains: qstr, mode: "insensitive" } } } } },
-        ];
-      }
+if (q) {
+  const qstr = q as string;
+  switch (req.query.searchType) {
+    case "itemcode":
+      ORsearch.push({ ItemCode: { Name: { contains: qstr, mode: "insensitive" } } });
+      break;
+    case "product":
+      ORsearch.push({ ItemCode: { PartNumber: { Product: { Name: { contains: qstr, mode: "insensitive" } } } } });
+      break;
+    case "admin":
+      ORsearch.push({ Admin: { Username: { contains: qstr, mode: "insensitive" } } });
+      ORsearch.push({ Admin: { Name: { contains: qstr, mode: "insensitive" } } });
+      break;
+    case "note":
+      ORsearch.push({ Note: { contains: qstr, mode: "insensitive" } });
+      break;
+    default: // Semua
+      ORsearch = [
+        { ItemCode: { Name: { contains: qstr, mode: "insensitive" } } },
+        { Note: { contains: qstr, mode: "insensitive" } },
+        { Admin: { Username: { contains: qstr, mode: "insensitive" } } },
+        { Admin: { Name: { contains: qstr, mode: "insensitive" } } },
+        { ItemCode: { PartNumber: { Product: { Name: { contains: qstr, mode: "insensitive" } } } } },
+      ];
+  }
+}
+
+// Gabungkan ke where query jika ORsearch ada isinya:
+if (ORsearch.length > 0) {
+  where = { ...where, OR: ORsearch };
+}
 
       // Query
       const [totalData, histories] = await Promise.all([

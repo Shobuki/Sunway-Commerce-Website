@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { adminAuth, authorizeMenuAccess, authorizeMenuFeatureAccess } from "../../../../middlewares/admin/auth"
-import {importProductFromPDF} from "../../../../controllers/admin-api/product/importproduct";
+import { importProductFromPDF } from "../../../../controllers/admin-api/product/importproduct";
 import {
   getAllProducts,
   getProductCategoriesWithProducts,
@@ -57,7 +57,7 @@ import {
 
 //stock
 import { getStockData, updateStock } from "../../../../controllers/admin-api/product/Stock";
-import {addWarehouseToItemCode,removeWarehouseFromItemCode} from "../../../../controllers/admin-api/product/Warehouse/WarehouseItemcode"
+import { addWarehouseToItemCode, removeWarehouseFromItemCode } from "../../../../controllers/admin-api/product/Warehouse/WarehouseItemcode"
 import { updateStockFromExcel, upload } from "../../../../controllers/admin-api/product/UpdateExcelStock"
 import { getStockHistory, getStockHistoryOptions } from "../../../../controllers/admin-api/product/StockHistory";
 
@@ -75,7 +75,10 @@ const router = Router();
 //router.use(authenticateSuperAdmin);
 
 
-router.post("/import-product-pdf", importProductFromPDF);
+router.post("/import-product-pdf", 
+  adminAuth,
+  authorizeMenuFeatureAccess("product", "editproduct"),
+  importProductFromPDF);
 //Product Routes
 router.post(
   "/products/main",
