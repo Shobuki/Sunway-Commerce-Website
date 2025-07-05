@@ -38,7 +38,29 @@ class WarehouseStock {
 
       const workbook = XLSX.read(file.buffer, { type: "buffer" });
       const sheetName = workbook.SheetNames[0];
-      const sheetData = XLSX.utils.sheet_to_json<any>(workbook.Sheets[sheetName]);
+      const worksheet = workbook.Sheets[sheetName];
+
+      // Ambil data per baris mentah (array of array)
+      const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+      // Cari baris header: harus ada "Item Code" dan/atau "Business Unit"
+      let headerIndex = rawRows.findIndex(row => {
+        if (!Array.isArray(row)) return false;
+        const joined = row.map(cell => (cell || '').toString().toLowerCase()).join('|');
+        return joined.includes('item code') && joined.includes('business unit');
+      });
+      if (headerIndex === -1) {
+        res.status(400).json({ message: "Header 'Item Code' dan 'Business Unit' tidak ditemukan di Excel." });
+        return;
+      }
+
+      // Ambil header dan data setelahnya saja
+      const headerRow = rawRows[headerIndex];
+      const dataRows = rawRows.slice(headerIndex + 1);
+
+      // Konversi ke array of object (untuk sheet_to_json)
+      const normalizedSheet = [headerRow, ...dataRows];
+      const sheetData = XLSX.utils.sheet_to_json<any>(XLSX.utils.aoa_to_sheet(normalizedSheet));
 
       const allItemCodes = await prisma.itemCode.findMany({
         where: { DeletedAt: null },
