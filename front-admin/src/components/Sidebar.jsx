@@ -5,7 +5,14 @@ import useSession from "../hoc/useSession";
 // ICON MAP
 // ICON MAP
 
-
+const keywords = ["Admin", "Dealer", "User", "Setting", "Sales", "Order", "Stock", "Statistic", "Role", "Menu", "Access", "Product", "Price", "Approve", "History"];
+function formatMenuName(name) {
+  let s = name;
+  keywords.forEach(kw => {
+    s = s.replace(new RegExp(kw, 'gi'), ' ' + kw);
+  });
+  return s.replace(/\s+/g, ' ').trim().replace(/^./, c => c.toUpperCase());
+}
 
 const Sidebar = ({ isOpen }) => {
   const { session, loading } = useSession();
@@ -136,7 +143,7 @@ const Sidebar = ({ isOpen }) => {
                 >⠿</span>
               )}
 
-              {isOpen && <Link href={menu.Path}>{menu.Name[0].toUpperCase() + menu.Name.slice(1)}</Link>}
+              {isOpen && <Link href={menu.Path}>{formatMenuName(menu.Name)}</Link>}
             </li>
           ))}
         </ul>

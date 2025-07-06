@@ -79,7 +79,8 @@ class Price {
           ItemCode: { select: { Name: true } },
           Dealer: { select: { Id: true, CompanyName: true } },
           PriceCategory: { select: { Id: true, Name: true } },
-          WholesalePrices: true,
+          // hanya ambil wholesalePrice yang DeletedAt: null
+          WholesalePrices: { where: { DeletedAt: null } },
         },
       });
 
@@ -229,49 +230,49 @@ class Price {
   };
 
   getDealersFetchPrice = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-      try {
-        const { page = 1 } = req.query;
-        const take = 30;
-        const skip = (Number(page) - 1) * take;
-  
-        const dealers = await prisma.dealer.findMany({
-          skip,
-          take,
-          where: {
-            DeletedAt: null,
-          },
-          include: {
-            User: true,
-            PriceCategory: true,
-            Sales: true,
-          },
-          orderBy: { CreatedAt: "desc" },
-        });
-  
-        const totalCount = await prisma.dealer.count({
-          where: {
-            DeletedAt: null,
-          },
-        });
-  
-        const enrichedDealers = dealers.map((dealer) => ({
-          ...dealer,
-          PriceCategoryName: dealer.PriceCategory ? dealer.PriceCategory.Name : "No Price Category",
-        }));
-  
-        res.status(200).json({
-          data: enrichedDealers,
-          meta: {
-            total: totalCount,
-            page: Number(page),
-            pages: Math.ceil(totalCount / take),
-          },
-        });
-      } catch (error) {
-        console.error("Error fetching dealers:", error);
-        next(error);
-      }
-    };
+    try {
+      const { page = 1 } = req.query;
+      const take = 30;
+      const skip = (Number(page) - 1) * take;
+
+      const dealers = await prisma.dealer.findMany({
+        skip,
+        take,
+        where: {
+          DeletedAt: null,
+        },
+        include: {
+          User: true,
+          PriceCategory: true,
+          Sales: true,
+        },
+        orderBy: { CreatedAt: "desc" },
+      });
+
+      const totalCount = await prisma.dealer.count({
+        where: {
+          DeletedAt: null,
+        },
+      });
+
+      const enrichedDealers = dealers.map((dealer) => ({
+        ...dealer,
+        PriceCategoryName: dealer.PriceCategory ? dealer.PriceCategory.Name : "No Price Category",
+      }));
+
+      res.status(200).json({
+        data: enrichedDealers,
+        meta: {
+          total: totalCount,
+          page: Number(page),
+          pages: Math.ceil(totalCount / take),
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching dealers:", error);
+      next(error);
+    }
+  };
 
   validateDealerSpecificPriceInput = (input: any) => {
     if (!input.ItemCodeId || isNaN(Number(input.ItemCodeId))) return "ItemCodeId wajib diisi (angka)";
@@ -304,19 +305,34 @@ class Price {
         return;
       }
 
-      const existingPrice = await prisma.price.findFirst({
+      // *** HAPUS pengecekan existingPrice ini ***
+      // const existingPrice = await prisma.price.findFirst({
+      //   where: {
+      //     ItemCodeId: Number(ItemCodeId),
+      //     DealerId: Number(DealerId),
+      //     DeletedAt: null,
+      //   },
+      // });
+      // if (existingPrice) {
+      //   res.status(403).json({ message: "A price for this dealer already exists." });
+      //   return;
+      // }
+
+      // Cek hanya price specific (tanpa wholesale)
+      const existingSpecific = await prisma.price.findFirst({
         where: {
           ItemCodeId: Number(ItemCodeId),
           DealerId: Number(DealerId),
           DeletedAt: null,
+          WholesalePrices: { none: {} }, // TIDAK ADA data wholesale
         },
       });
-
-      if (existingPrice) {
-        res.status(403).json({ message: "A price for this dealer already exists." });
+      if (existingSpecific) {
+        res.status(403).json({ message: "Specific price untuk dealer dan item code ini sudah ada." });
         return;
       }
 
+      // Jika tidak ada, boleh create
       const newPrice = await prisma.price.create({
         data: {
           ItemCodeId: Number(ItemCodeId),
@@ -324,7 +340,6 @@ class Price {
           Price: Number(Price),
         },
       });
-
       res.status(201).json({ message: "Dealer-specific price created successfully", data: newPrice });
     } catch (error) {
       console.error("❌ Error creating dealer-specific price:", error);
@@ -362,6 +377,7 @@ class Price {
         return;
       }
 
+      // CUKUP CEK SEKALI SAJA DISINI
       const existingWholesale = await prisma.price.findFirst({
         where: {
           ItemCodeId: Number(ItemCodeId),
@@ -383,6 +399,7 @@ class Price {
         return;
       }
 
+      // lanjut create price
       const newPrice = await prisma.price.create({
         data: {
           ItemCodeId: Number(ItemCodeId),
@@ -508,12 +525,19 @@ class Price {
     try {
       const { Id } = req.params;
 
+      // 1. Soft delete price
       await prisma.price.update({
         where: { Id: Number(Id) },
         data: { DeletedAt: new Date() },
       });
 
-      res.status(200).json({ message: "Price deleted successfully" });
+      // 2. Soft delete semua wholesalePrice yang terkait dengan price ini
+      await prisma.wholesalePrice.updateMany({
+        where: { PriceId: Number(Id), DeletedAt: null },
+        data: { DeletedAt: new Date() },
+      });
+
+      res.status(200).json({ message: "Price & related wholesale prices deleted successfully" });
     } catch (error) {
       console.error("Error deleting price:", error);
       next(error);

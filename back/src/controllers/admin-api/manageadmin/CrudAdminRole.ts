@@ -135,19 +135,35 @@ class AdminRole {
   };
 
   deleteAdminRole = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
+  try {
+    const { id } = req.params;
+    const roleId = parseInt(id, 10);
 
-      await prisma.adminRole.delete({
-        where: { Id: parseInt(id, 10) },
-      });
+    // 1. Cek apakah role masih dipakai oleh admin manapun
+    const adminCount = await prisma.admin.count({
+      where: { RoleId: roleId },
+    });
 
-      res.status(200).json({ message: 'Admin role deleted successfully' });
-    } catch (error) {
-      console.error('Error deleting admin role:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
+    if (adminCount > 0) {
+      res.status(400).json({ error: "Role tidak dapat dihapus karena masih ada admin yang memakai role ini." });
+      return;
     }
-  };
+
+    // 2. Hapus semua relasi RoleMenuAccess dan RoleMenuFeatureAccess
+    await prisma.roleMenuAccess.deleteMany({ where: { RoleId: roleId } });
+    await prisma.roleMenuFeatureAccess.deleteMany({ where: { RoleId: roleId } });
+
+    // 3. Hapus adminRole-nya
+    await prisma.adminRole.delete({
+      where: { Id: roleId },
+    });
+
+    res.status(200).json({ message: 'Admin role deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting admin role:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
 }
 
 const adminRoleController = new AdminRole();

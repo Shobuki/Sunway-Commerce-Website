@@ -10,6 +10,7 @@ interface Price {
   Id: number;
   Dealer: string | null;
   Price: number;
+  priceCategory?: string; // Tambahkan ini untuk tahu kategori harga
   MinQuantity?: number;
   MaxQuantity?: number;
   isWholesale?: boolean;
@@ -111,23 +112,37 @@ const PriceList: React.FC = () => {
   };
 
   const fetchPrices = async (itemId: number) => {
-    setLoading(itemId);
-    setError(null);
-    try {
-      const response = await axios.get(`/api/admin/admin/prices/category/item/${itemId}`);
-      const data = response.data?.data;
-      if (!data || data.length === 0 || !data[0].PriceCategories) {
-        setPricesByItem(prev => ({ ...prev, [itemId]: [] }));
-        return;
-      }
-      setPricesByItem(prev => ({ ...prev, [itemId]: data[0].PriceCategories }));
-    } catch (err) {
-      setError("Error fetching price categories. Please try again later.");
+  setLoading(itemId);
+  setError(null);
+  try {
+    const response = await axios.get(`/api/admin/admin/prices/category/item/${itemId}`);
+    const data = response.data?.data;
+    if (!data || data.length === 0 || !data[0].PriceCategories) {
       setPricesByItem(prev => ({ ...prev, [itemId]: [] }));
-    } finally {
-      setLoading(null);
+      return;
     }
-  };
+    // ---- MODIFIKASI DI SINI: ----
+    // mapping agar tiap Prices ada properti isWholesale
+    const categorized = data[0].PriceCategories.map((cat: any) => ({
+  ...cat,
+  Prices: (cat.Prices || []).map((p: any) => ({
+    ...p,
+    // hanya kasih isWholesale jika kategori Wholesale Price
+    isWholesale: cat.PriceCategory === "Wholesale Price",
+    // kasih juga priceCategory supaya tahu ini custom atau bukan
+    priceCategory: cat.PriceCategory
+  }))
+}));
+setPricesByItem(prev => ({ ...prev, [itemId]: categorized }));
+    setPricesByItem(prev => ({ ...prev, [itemId]: categorized }));
+  } catch (err) {
+    setError("Error fetching price categories. Please try again later.");
+    setPricesByItem(prev => ({ ...prev, [itemId]: [] }));
+  } finally {
+    setLoading(null);
+  }
+};
+
 
   const fetchPriceCategories = async () => {
     try {
@@ -343,13 +358,25 @@ const PriceList: React.FC = () => {
     return prices.map(price => (
       <div key={price.Id} className="flex justify-between items-center px-4 py-2 border-b text-sm last:border-b-0 hover:bg-gray-50">
         <div className="flex-1">
-          <span className="font-medium">{price.Dealer || (price.isWholesale ? "Wholesale" : "Standard Price")}</span>
-          {price.isWholesale && (
-            <span className="text-xs text-gray-500 ml-2 block sm:inline">
-              (Min: {price.MinQuantity}, Max: {price.MaxQuantity})
-            </span>
-          )}
-        </div>
+    <span className="font-medium">
+      {price.Dealer || (price.isWholesale ? "Wholesale" : "Standard Price")}
+      {price.isWholesale && (
+        <span className="inline-block bg-green-100 text-green-700 text-xs font-bold ml-2 px-2 py-0.5 rounded">
+          Wholesale
+        </span>
+      )}
+      {!price.isWholesale && price.Dealer && (
+        <span className="inline-block bg-yellow-100 text-yellow-700 text-xs font-bold ml-2 px-2 py-0.5 rounded">
+          Specific
+        </span>
+      )}
+    </span>
+    {price.isWholesale && (
+      <span className="text-xs text-gray-500 ml-2">
+        (Min: {price.MinQuantity}, Max: {price.MaxQuantity})
+      </span>
+    )}
+  </div>
         <span className="font-semibold mx-4">Rp{price.Price.toLocaleString()}</span>
         <div className="flex gap-2 flex-shrink-0">
           {hasFeatureAccess(menuAccess, "editprice") && (
@@ -382,22 +409,23 @@ const PriceList: React.FC = () => {
     const generalPriceCategoriesGrouped: { categoryName: string; prices: Price[] }[] = [];
 
     allAPICategories.forEach(apiCategory => {
-      apiCategory.Prices.forEach(price => {
-        if (price.isWholesale) {
-          collectedWholesalePrices.push(price);
-        } else if (price.Dealer) {
-          collectedDealerPrices.push(price);
-        } else {
-          // Harga umum, kelompokkan berdasarkan PriceCategory aslinya
-          let group = generalPriceCategoriesGrouped.find(g => g.categoryName === apiCategory.PriceCategory);
-          if (!group) {
-            group = { categoryName: apiCategory.PriceCategory, prices: [] };
-            generalPriceCategoriesGrouped.push(group);
-          }
-          group.prices.push(price);
-        }
-      });
-    });
+  apiCategory.Prices.forEach(price => {
+    // Bedakan dengan eksplisit dari priceCategory
+    if (price.isWholesale && price.priceCategory === "Wholesale Price") {
+      collectedWholesalePrices.push(price);
+    } else if (price.Dealer && price.priceCategory === "Custom Price") {
+      collectedDealerPrices.push(price);
+    } else {
+      // Harga umum
+      let group = generalPriceCategoriesGrouped.find(g => g.categoryName === apiCategory.PriceCategory);
+      if (!group) {
+        group = { categoryName: apiCategory.PriceCategory, prices: [] };
+        generalPriceCategoriesGrouped.push(group);
+      }
+      group.prices.push(price);
+    }
+  });
+});
 
     // Hapus duplikasi jika harga yang sama muncul di beberapa kategori API (berdasarkan ID harga)
     collectedWholesalePrices = [...new Map(collectedWholesalePrices.map(item => [item.Id, item])).values()];
