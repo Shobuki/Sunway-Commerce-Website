@@ -41,7 +41,7 @@ const ListTransaction = () => {
   const [sortAsc, setSortAsc] = useState(true);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
 
- useEffect(() => {
+  useEffect(() => {
     const fetchTransactions = async () => {
       const token = sessionStorage.getItem('userToken');
       const userId = sessionStorage.getItem('userId');
@@ -106,11 +106,43 @@ const ListTransaction = () => {
   // Ganti ke ProductDetails
   const calculateSubtotal = (details) => {
     if (!Array.isArray(details)) return 0;
+    return details.reduce(
+      (sum, item) => sum + (item.Price * item.Quantity),
+      0
+    );
+  };
+  const calculateTotalTax = (details) => {
+    if (!Array.isArray(details)) return 0;
+    return details.reduce((sum, item) => {
+      if (item.TaxPercentage && item.TaxPercentage > 0) {
+        // Tax = FinalPrice - Harga sebelum pajak
+        return sum + (item.FinalPrice - (item.Price * item.Quantity));
+      }
+      return sum;
+    }, 0);
+  };
+  // Grand Total = semua FinalPrice
+  const calculateGrandTotal = (details) => {
+    if (!Array.isArray(details)) return 0;
     return details.reduce((sum, item) => sum + (item.FinalPrice || 0), 0);
   };
+
   const calculateTax = (details, rate = 0.11) => {
     if (!Array.isArray(details)) return 0;
     return calculateSubtotal(details) * rate;
+  };
+  const getMaxTaxPercentage = (details) => {
+    if (!Array.isArray(details)) return 0;
+    // Ambil tax tertinggi dari list item
+    return Math.max(...details.map(d => Number(d.TaxPercentage) || 0));
+  };
+  const getTotalLabel = (details) => {
+    const maxTax = getMaxTaxPercentage(details);
+    if (maxTax > 0) {
+      return `Total dengan Pajak (${maxTax}%)`;
+    } else {
+      return 'Total tanpa Pajak';
+    }
   };
   const calculateTotalWithTax = (details) => {
     return calculateSubtotal(details) + calculateTax(details);
@@ -214,7 +246,7 @@ const ListTransaction = () => {
                     color={getStatusColor(transaction.Status)}
                   />
                   <Typography variant="body1" fontWeight="bold" minWidth="100px" textAlign="right">
-                    Rp {(calculateTotalWithTax(transaction?.ProductDetails) || 0).toLocaleString()}
+                    Rp {calculateGrandTotal(transaction?.ProductDetails).toLocaleString()}
                   </Typography>
                 </Box>
               </ListItem>
@@ -287,10 +319,10 @@ const ListTransaction = () => {
                     Subtotal: Rp {calculateSubtotal(selectedTransaction.ProductDetails).toLocaleString()}
                   </Typography>
                   <Typography variant="body1" textAlign="right" fontWeight="medium" mb={1}>
-                    Pajak (11%): Rp {calculateTax(selectedTransaction.ProductDetails).toLocaleString()}
+                    Pajak: Rp {calculateTotalTax(selectedTransaction.ProductDetails).toLocaleString()}
                   </Typography>
                   <Typography variant="h6" textAlign="right">
-                    Total dengan Pajak: Rp {(calculateTotalWithTax(selectedTransaction.ProductDetails)).toLocaleString()}
+                    {getTotalLabel(selectedTransaction.ProductDetails)}: Rp {calculateGrandTotal(selectedTransaction.ProductDetails).toLocaleString()}
                   </Typography>
                 </Grid>
               </Grid>

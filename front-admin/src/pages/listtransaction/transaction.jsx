@@ -75,14 +75,15 @@ const Transaction = () => {
     }
   }, [forceApplyTax, activeTax]);
 
-  useEffect(() => {
-    if (showModal && updateDetails.length > 0) {
-      const hasAnyTax = updateDetails.some(
-        d => d.TaxId != null || (typeof d.TaxPercentage === "number" && d.TaxPercentage > 0)
-      );
-      setForceApplyTax(hasAnyTax);
-    }
-  }, [showModal, updateDetails]);
+ useEffect(() => {
+  if (showModal && updateDetails.length > 0) {
+    const hasAnyTax = updateDetails.some(
+      d => d.TaxId != null || (typeof d.TaxPercentage === "number" && d.TaxPercentage > 0)
+    );
+    setForceApplyTax(hasAnyTax);
+  }
+  // eslint-disable-next-line
+}, [showModal]); 
 
   const fetchSalesOrders = async () => {
     try {

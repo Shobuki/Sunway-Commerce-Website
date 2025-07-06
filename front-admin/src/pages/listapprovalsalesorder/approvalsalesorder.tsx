@@ -174,15 +174,16 @@ const ApprovalSalesOrder: React.FC = () => {
   }, [forceApplyTax, activeTax]);
 
 
-  useEffect(() => {
-    // Jika modal review terbuka & ada detail order
-    if (showModal && updateDetails.length > 0) {
-      const hasAnyTax = updateDetails.some(
-        d => d.TaxId != null || (typeof d.TaxPercentage === 'number' && d.TaxPercentage > 0)
-      );
-      setForceApplyTax(hasAnyTax);
-    }
-  }, [showModal, updateDetails]);
+  // Hanya trigger pertama kali saat modal dibuka
+useEffect(() => {
+  if (showModal && updateDetails.length > 0) {
+    const hasAnyTax = updateDetails.some(
+      d => d.TaxId != null || (typeof d.TaxPercentage === 'number' && d.TaxPercentage > 0)
+    );
+    setForceApplyTax(hasAnyTax);
+  }
+  // eslint-disable-next-line
+}, [showModal]);
 
   const fetchSessionAndSalesOrders = async () => {
     const token = localStorage.getItem("token");
