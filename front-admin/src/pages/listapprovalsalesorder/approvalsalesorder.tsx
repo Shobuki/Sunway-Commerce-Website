@@ -53,7 +53,7 @@ interface ItemCode {
 
 
 interface SalesOrderDetail {
-  Id: number;
+  Id?: number;
   ItemCodeId: number;
   ItemCode: ItemCode; // Tambahkan ini
   Quantity: number;
@@ -175,15 +175,15 @@ const ApprovalSalesOrder: React.FC = () => {
 
 
   // Hanya trigger pertama kali saat modal dibuka
-useEffect(() => {
-  if (showModal && updateDetails.length > 0) {
-    const hasAnyTax = updateDetails.some(
-      d => d.TaxId != null || (typeof d.TaxPercentage === 'number' && d.TaxPercentage > 0)
-    );
-    setForceApplyTax(hasAnyTax);
-  }
-  // eslint-disable-next-line
-}, [showModal]);
+  useEffect(() => {
+    if (showModal && updateDetails.length > 0) {
+      const hasAnyTax = updateDetails.some(
+        d => d.TaxId != null || (typeof d.TaxPercentage === 'number' && d.TaxPercentage > 0)
+      );
+      setForceApplyTax(hasAnyTax);
+    }
+    // eslint-disable-next-line
+  }, [showModal]);
 
   const fetchSessionAndSalesOrders = async () => {
     const token = localStorage.getItem("token");
@@ -264,10 +264,21 @@ useEffect(() => {
 
 
   const fetchItemCodes = async (itemCodeId: number, query: string, index: number) => {
+    // ⛔ Cegah request tidak valid
+    if ((!query || query.trim() === "") && (!itemCodeId || itemCodeId <= 0)) {
+      // Tidak ada data yang bisa dicari, skip
+      setItemCodeOptions(prev => {
+        const updated = [...prev];
+        updated[index] = []; // Kosongkan hasil
+        return updated;
+      });
+      return;
+    }
+
     try {
       const response = await axios.post("/api/admin/admin/salesorder/detail/fetchrelateditemcodes", {
-        ItemCodeId: itemCodeId > 0 ? itemCodeId : undefined,
-        query
+        ...(query && query.trim() !== "" ? { query } : {}),
+        ...(itemCodeId && itemCodeId > 0 && (!query || query.trim() === "") ? { ItemCodeId: itemCodeId } : {}),
       });
       const result = response.data;
       if (result?.data) {
@@ -326,12 +337,15 @@ useEffect(() => {
     setUpdateDetails((prevDetails) => [
       ...prevDetails,
       {
-        Id: Date.now(), // Menggunakan timestamp sebagai ID sementara untuk client-side key
         ItemCodeId: 0,
         ItemCode: { Id: 0, Name: "Pilih Item Code", PartNumberId: 0 }, // Default ItemCode
         Quantity: 1,
         Price: 0,
         FinalPrice: 0,
+        PriceCategoryId: undefined,
+        TaxId: null,
+        TaxPercentage: null,
+        TaxName: null,
       },
     ]);
     // Perluas juga state untuk dropdown dan options item baru
@@ -376,13 +390,16 @@ useEffect(() => {
         CustomerPoNumber: selectedOrder?.CustomerPoNumber,
         DeliveryOrderNumber: selectedOrder?.DeliveryOrderNumber,
         ForceApplyTax: forceApplyTax,
-        SalesOrderDetails: updateDetails.map((detail) => ({
-          Id: detail.Id,
-          Quantity: detail.Quantity,
-          Price: detail.Price,
-          ItemCodeId: detail.ItemCodeId,
-          PriceCategoryId: detail.PriceCategoryId ?? null,
-        })),
+        SalesOrderDetails: updateDetails.map((detail) => {
+          const obj: any = {
+            Quantity: detail.Quantity,
+            Price: detail.Price,
+            ItemCodeId: detail.ItemCodeId,
+            PriceCategoryId: detail.PriceCategoryId ?? null,
+          };
+          if (detail.Id) obj.Id = detail.Id; // hanya masukkan jika edit
+          return obj;
+        }),
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -460,13 +477,16 @@ useEffect(() => {
         CustomerPoNumber: selectedOrder?.CustomerPoNumber,
         DeliveryOrderNumber: selectedOrder?.DeliveryOrderNumber,
         ForceApplyTax: forceApplyTax,
-        SalesOrderDetails: updateDetails.map((detail) => ({
-          Id: detail.Id,
-          Quantity: detail.Quantity,
-          Price: detail.Price,
-          ItemCodeId: detail.ItemCodeId,
-          PriceCategoryId: detail.PriceCategoryId ?? null,
-        })),
+        SalesOrderDetails: updateDetails.map((detail) => {
+          const obj: any = {
+            Quantity: detail.Quantity,
+            Price: detail.Price,
+            ItemCodeId: detail.ItemCodeId,
+            PriceCategoryId: detail.PriceCategoryId ?? null,
+          };
+          if (detail.Id) obj.Id = detail.Id; // hanya masukkan jika edit
+          return obj;
+        }),
       };
       const token = localStorage.getItem("token");
       await axios.put(

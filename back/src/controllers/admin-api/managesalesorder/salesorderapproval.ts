@@ -13,7 +13,9 @@ function padZero(num: number) {
   return num < 10 ? `0${num}` : `${num}`;
 }
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  log: ['query', 'info', 'warn', 'error'],
+});
 
 // ✅ Configure your email transporter
 
@@ -744,6 +746,7 @@ export const updateSalesOrderApproval = async (req: Request, res: Response): Pro
             },
           });
         } else if (!detail.Id && detail.Quantity > 0 && detail.Price) {
+          console.log('CREATE NEW SALESORDERDETAIL:', detail);
           await prisma.salesOrderDetail.create({
             data: {
               SalesOrderId: SalesOrderId,

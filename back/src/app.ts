@@ -25,7 +25,7 @@ app.use(
       console.log("🌐 IP Request:", getClientIp(origin)); // asal IP
       const allowedOrigins = ['http://localhost:3001','http://localhost:3002','http://192.168.1.5:3001',
   'http://26.68.245.19:3001', // IP lokal server
-  'http://192.168.1.10:3001','http://192.168.0.103:3001','http://10.3.38.97:3001','http://10.3.38.97:3002','http://192.168.117.1:3002'];
+  'http://192.168.1.10:3001','http://192.168.0.103:3001','http://10.3.38.97:3001','http://10.3.38.97:3002','http://192.168.117.1:3002','https://damages-stan-meetup-ski.trycloudflare.com','https://absent-flour-merit-participating.trycloudflare.com'];
 
 
   

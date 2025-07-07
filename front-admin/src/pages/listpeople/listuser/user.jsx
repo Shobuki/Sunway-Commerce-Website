@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import axios from "@/utils/axios";
-import {hasMenuAccess,hasFeatureAccess} from "@/utils/access";
+import { hasMenuAccess, hasFeatureAccess } from "@/utils/access";
 
 const UserList = () => {
   const [users, setUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
-const [menuAccess, setMenuAccess] = useState(null);
+  const [menuAccess, setMenuAccess] = useState(null);
   const [loadingAccess, setLoadingAccess] = useState(true);
 
   useEffect(() => {
@@ -25,10 +25,10 @@ const [menuAccess, setMenuAccess] = useState(null);
   }, []);
 
   useEffect(() => {
-  if (menuAccess && hasMenuAccess(menuAccess)) {
-    fetchUsers();
-  }
-}, [menuAccess]);
+    if (menuAccess && hasMenuAccess(menuAccess)) {
+      fetchUsers();
+    }
+  }, [menuAccess]);
 
   const fetchUsers = async () => {
     try {
@@ -71,8 +71,10 @@ const [menuAccess, setMenuAccess] = useState(null);
                   <td className="p-3 border">{user.Email}</td>
                   <td className="p-3 border">{user.Province || "-"}</td>
                   <td className="p-3 border text-center">
-                    {user.Dealer && user.Dealer.length > 0 ? (
-                      <span className="text-green-600 font-semibold">Dealer</span>
+                    {user.Dealer ? (
+                      <span className="text-green-600 font-semibold">
+                        {user.Dealer.CompanyName}
+                      </span>
                     ) : (
                       <span className="text-red-600 font-semibold">Not a Dealer</span>
                     )}

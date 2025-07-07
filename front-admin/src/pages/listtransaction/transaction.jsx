@@ -75,15 +75,15 @@ const Transaction = () => {
     }
   }, [forceApplyTax, activeTax]);
 
- useEffect(() => {
-  if (showModal && updateDetails.length > 0) {
-    const hasAnyTax = updateDetails.some(
-      d => d.TaxId != null || (typeof d.TaxPercentage === "number" && d.TaxPercentage > 0)
-    );
-    setForceApplyTax(hasAnyTax);
-  }
-  // eslint-disable-next-line
-}, [showModal]); 
+  useEffect(() => {
+    if (showModal && updateDetails.length > 0) {
+      const hasAnyTax = updateDetails.some(
+        d => d.TaxId != null || (typeof d.TaxPercentage === "number" && d.TaxPercentage > 0)
+      );
+      setForceApplyTax(hasAnyTax);
+    }
+    // eslint-disable-next-line
+  }, [showModal]);
 
   const fetchSalesOrders = async () => {
     try {
@@ -91,12 +91,12 @@ const Transaction = () => {
       if (result.data) {
         const normalized = result.data.map(order => ({
           ...order,
-          SalesOrderDetails: order.Details
+          // Pastikan selalu SalesOrderDetails
+          SalesOrderDetails: order.SalesOrderDetails || order.Details || [],
         }));
         setSalesOrders(normalized);
       }
     } catch (error) {
-      // Axios error sudah lebih jelas
       console.error("Error fetching sales orders:", error);
       alert(error.response?.data?.message || error.message || "Fetch error");
     }
@@ -123,11 +123,24 @@ const Transaction = () => {
   };
 
   const fetchItemCodes = async (itemCodeId, query, index) => {
-    try {
-      const { data: result } = await axios.post("/api/admin/admin/salesorder/detail/fetchrelateditemcodes", {
-        ItemCodeId: itemCodeId > 0 ? itemCodeId : undefined,
-        query
+    // ⛔ Jangan fetch kalau query kosong DAN itemCodeId invalid
+    if ((!query || query.trim() === "") && (!itemCodeId || itemCodeId <= 0)) {
+      setItemCodeOptions((prev) => {
+        const updated = [...prev];
+        updated[index] = [];
+        return updated;
       });
+      return;
+    }
+
+    try {
+      const { data: result } = await axios.post(
+        "/api/admin/admin/salesorder/detail/fetchrelateditemcodes",
+        {
+          ...(query && query.trim() !== "" ? { query } : {}),
+          ...(itemCodeId && itemCodeId > 0 && (!query || query.trim() === "") ? { ItemCodeId: itemCodeId } : {}),
+        }
+      );
       if (result?.data) {
         setItemCodeOptions((prev) => {
           const updated = [...prev];
@@ -366,10 +379,10 @@ const Transaction = () => {
                       onClick={() => {
                         setSelectedOrder(order);
                         setUpdateDetails(
-                          Array.isArray(order.Details)
-                            ? order.Details.map((d) => ({
+                          Array.isArray(order.SalesOrderDetails)
+                            ? order.SalesOrderDetails.map((d) => ({
                               ...d,
-                              ItemCode: { Id: d.ItemCodeId, Name: d.ItemName },
+                              ItemCode: { Id: d.ItemCodeId, Name: d.ItemName || (d.ItemCode && d.ItemCode.Name) },
                               TaxId: d.TaxId ?? null,
                               TaxPercentage: d.TaxPercentage ?? null,
                               TaxName: d.TaxName ?? null,
@@ -719,7 +732,6 @@ const Transaction = () => {
                       setUpdateDetails([
                         ...updateDetails,
                         {
-                          Id: Date.now(),
                           ItemCodeId: 0,
                           ItemCode: { Id: 0, Name: "Pilih Item Code", PartNumberId: 0 },
                           Quantity: 1,

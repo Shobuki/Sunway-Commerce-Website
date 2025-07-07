@@ -308,7 +308,7 @@ const Home = () => {
   return (
     <>
       <Navbar />
-      <div className="container mx-auto py-8 px-2 md:px-0">
+      <div className="container mx-auto py-8 px-2 md:px-0 background-white ">
         <h1 className="text-3xl font-bold mb-4 text-gray-800">Our Products</h1>
         <p className="text-gray-600 mb-8">
           Browse product categories below, or search for products directly.

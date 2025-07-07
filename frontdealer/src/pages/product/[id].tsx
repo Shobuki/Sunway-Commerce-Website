@@ -174,24 +174,24 @@ const ProductDetail = () => {
             <table className="w-full text-xs md:text-sm">
               <thead className="bg-yellow-300">
                 <tr>
-                  <th className="px-4 py-2 border" rowSpan={2}>Part Number</th>
-                  <th className="px-2 py-2 border" rowSpan={2}>dash</th>
-                  <th className="px-2 py-2 border" colSpan={2}>I.D.</th>
-                  <th className="px-2 py-2 border" rowSpan={2}>O.D.<br />(mm)</th>
-                  <th className="px-2 py-2 border" colSpan={2}>Max Working Pressure</th>
-                  <th className="px-2 py-2 border" colSpan={2}>Min Burst Pressure</th>
-                  <th className="px-2 py-2 border" colSpan={2}>Min Bend Radius</th>
-                  <th className="px-2 py-2 border" rowSpan={2}>Hose Weight<br />(m/kg)</th>
+                  <th className="px-4 py-2 border text-black" rowSpan={2}>Part Number</th>
+                  <th className="px-2 py-2 border text-black" rowSpan={2}>dash</th>
+                  <th className="px-2 py-2 border text-black" colSpan={2}>I.D.</th>
+                  <th className="px-2 py-2 border text-black" rowSpan={2}>O.D.<br />(mm)</th>
+                  <th className="px-2 py-2 border text-black" colSpan={2}>Max Working Pressure</th>
+                  <th className="px-2 py-2 border text-black" colSpan={2}>Min Burst Pressure</th>
+                  <th className="px-2 py-2 border text-black" colSpan={2}>Min Bend Radius</th>
+                  <th className="px-2 py-2 border text-black" rowSpan={2}>Hose Weight<br />(m/kg)</th>
                 </tr>
                 <tr>
-                  <th className="px-2 py-2 border">inch</th>
-                  <th className="px-2 py-2 border">mm</th>
-                  <th className="px-2 py-2 border">psi</th>
-                  <th className="px-2 py-2 border">bar</th>
-                  <th className="px-2 py-2 border">psi</th>
-                  <th className="px-2 py-2 border">bar</th>
-                  <th className="px-2 py-2 border">inch</th>
-                  <th className="px-2 py-2 border">mm</th>
+                  <th className="px-2 py-2 border text-black">inch</th>
+                  <th className="px-2 py-2 border text-black">mm</th>
+                  <th className="px-2 py-2 border text-black">psi</th>
+                  <th className="px-2 py-2 border text-black">bar</th>
+                  <th className="px-2 py-2 border text-black">psi</th>
+                  <th className="px-2 py-2 border text-black">bar</th>
+                  <th className="px-2 py-2 border text-black">inch</th>
+                  <th className="px-2 py-2 border text-black">mm</th>
                 </tr>
               </thead>
               <tbody>
@@ -199,18 +199,18 @@ const ProductDetail = () => {
                   a.Name.localeCompare(b.Name, 'en', { numeric: true })
                 )).map((part) => (
                   <tr key={part.Id} className="hover:bg-yellow-50">
-                    <td className="px-4 py-2 border font-medium">{part.Name}</td>
-                    <td className="px-2 py-2 border text-center">{part.Dash}</td>
-                    <td className="px-2 py-2 border text-center">{mmToInch(part.InnerDiameter)}</td>
-                    <td className="px-2 py-2 border text-center">{part.InnerDiameter}</td>
-                    <td className="px-2 py-2 border text-center">{part.OuterDiameter}</td>
-                    <td className="px-2 py-2 border text-center">{part.WorkingPressure}</td>
-                    <td className="px-2 py-2 border text-center">{psiToBar(part.WorkingPressure)}</td>
-                    <td className="px-2 py-2 border text-center">{part.BurstingPressure}</td>
-                    <td className="px-2 py-2 border text-center">{psiToBar(part.BurstingPressure)}</td>
-                    <td className="px-2 py-2 border text-center">{mmToInch(part.BendingRadius)}</td>
-                    <td className="px-2 py-2 border text-center">{part.BendingRadius}</td>
-                    <td className="px-2 py-2 border text-center">{part.HoseWeight}</td>
+                    <td className="px-4 py-2 border font-medium text-black">{part.Name}</td>
+                    <td className="px-2 py-2 border text-center text-black">{part.Dash}</td>
+                    <td className="px-2 py-2 border text-center text-black">{mmToInch(part.InnerDiameter)}</td>
+                    <td className="px-2 py-2 border text-center text-black">{part.InnerDiameter}</td>
+                    <td className="px-2 py-2 border text-center text-black">{part.OuterDiameter}</td>
+                    <td className="px-2 py-2 border text-center text-black">{part.WorkingPressure}</td>
+                    <td className="px-2 py-2 border text-center text-black">{psiToBar(part.WorkingPressure)}</td>
+                    <td className="px-2 py-2 border text-center text-black">{part.BurstingPressure}</td>
+                    <td className="px-2 py-2 border text-center text-black">{psiToBar(part.BurstingPressure)}</td>
+                    <td className="px-2 py-2 border text-center text-black">{mmToInch(part.BendingRadius)}</td>
+                    <td className="px-2 py-2 border text-center text-black">{part.BendingRadius}</td>
+                    <td className="px-2 py-2 border text-center text-black">{part.HoseWeight}</td>
                   </tr>
                 ))}
               </tbody>
