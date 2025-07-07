@@ -8,12 +8,13 @@ export const createWarehouse = async (req: Request, res: Response): Promise<void
   try {
     const { Name, BusinessUnit, Location } = req.body;
 
+    // Validasi
     if (!BusinessUnit) {
       res.status(400).json({ message: "BusinessUnit is required" });
       return;
     }
-    if (!BusinessUnit || typeof BusinessUnit !== "string" || BusinessUnit.length > 10) {
-      res.status(400).json({ message: "BusinessUnit is required and must be max 10 characters." });
+    if (typeof BusinessUnit !== "string" || BusinessUnit.length > 10) {
+      res.status(400).json({ message: "BusinessUnit must be a string and max 10 characters." });
       return;
     }
     if (Name && (typeof Name !== "string" || Name.length > 50)) {
@@ -25,13 +26,14 @@ export const createWarehouse = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    // 1. Cari warehouse dgn BusinessUnit yg sama, apapun DeletedAt-nya
+    // Cari warehouse dgn BusinessUnit yang sama (baik aktif maupun sudah soft delete)
     const existingWarehouse = await prisma.warehouse.findFirst({
       where: { BusinessUnit },
+      // tidak usah filter DeletedAt
     });
 
     if (existingWarehouse) {
-      // 2. Jika ada, update DeletedAt=null dan update data lain
+      // Jika ada, update DeletedAt=null + update field lain
       const updatedWarehouse = await prisma.warehouse.update({
         where: { Id: existingWarehouse.Id },
         data: {
@@ -43,13 +45,13 @@ export const createWarehouse = async (req: Request, res: Response): Promise<void
       });
 
       res.status(200).json({
-        message: "Warehouse already exists and has been reactivated/updated.",
+        message: "Warehouse already exists. Data has been reactivated/updated.",
         data: updatedWarehouse,
       });
       return;
     }
 
-    // 3. Kalau tidak ada, create baru
+    // Jika tidak ada, create baru
     const newWarehouse = await prisma.warehouse.create({
       data: {
         Name,
@@ -58,7 +60,7 @@ export const createWarehouse = async (req: Request, res: Response): Promise<void
       },
     });
 
-    res.status(201).json({ message: "Warehouse created successfully", data: newWarehouse });
+    res.status(201).json({ message: "Warehouse created successfully.", data: newWarehouse });
   } catch (error) {
     console.error("Error creating warehouse:", error);
     res.status(500).json({ message: "Internal Server Error", error });
@@ -95,11 +97,11 @@ export const updateWarehouse = async (req: Request, res: Response): Promise<void
       return;
     }
 
-     if (!BusinessUnit) {
+    if (!BusinessUnit) {
       res.status(400).json({ message: "BusinessUnit is required" });
       return;
     }
-     // VALIDATION
+    // VALIDATION
     if (!BusinessUnit || typeof BusinessUnit !== "string" || BusinessUnit.length > 10) {
       res.status(400).json({ message: "BusinessUnit is required and must be max 10 characters." });
       return;
@@ -141,32 +143,32 @@ export const deleteWarehouse = async (req: Request, res: Response): Promise<void
 
     const warehouseId = Number(Id);
 
-    // Cek apakah masih ada stock di warehouse ini
-    const stocksWithQty = await prisma.warehouseStock.findFirst({
-      where: {
-        WarehouseId: warehouseId,
-        QtyOnHand: {
-          gt: 0, // hanya kalau masih ada stock
-        },
-      },
-    });
-
-    if (stocksWithQty) {
-      res.status(400).json({
-        message: "Warehouse cannot be deleted because it still contains stock.",
-      });
-      return;
-    }
-
-    // Soft delete
+    // 1. Soft delete warehouse (update DeletedAt)
     await prisma.warehouse.update({
       where: { Id: warehouseId },
-      data: {
-        DeletedAt: new Date(),
-      },
+      data: { DeletedAt: new Date() },
     });
 
-    res.status(200).json({ message: "Warehouse deleted successfully." });
+    // 2. Hapus semua relasi di DealerWarehouse (HARD DELETE)
+    await prisma.dealerWarehouse.deleteMany({
+      where: { WarehouseId: warehouseId }
+    });
+
+    // 3. Hapus semua WarehouseStock (bisa soft/hard delete, pilih salah satu)
+    // --- HARD DELETE (hapus record)
+    await prisma.warehouseStock.deleteMany({
+      where: { WarehouseId: warehouseId }
+    });
+
+    // --- SOFT DELETE (hapus secara soft, aktifkan ini jika mau)
+    // await prisma.warehouseStock.updateMany({
+    //   where: { WarehouseId: warehouseId },
+    //   data: { DeletedAt: new Date() }
+    // });
+
+    // Tidak menghapus SalesOrderDetail relasi
+
+    res.status(200).json({ message: "Warehouse soft deleted and all related DealerWarehouse & WarehouseStock have been removed." });
   } catch (error) {
     console.error("Error deleting warehouse:", error);
     res.status(500).json({ message: "Internal Server Error", error });

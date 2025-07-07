@@ -57,10 +57,11 @@ export const adminAuth = (req: Request, res: Response, next: NextFunction) => {
 
 
 // Cek akses menu berdasarkan string menuName
-export const authorizeMenuAccess = (menuName: string) => async (req: Request, res: Response, next: NextFunction) => {
+export const authorizeMenuAccess = (menuNames: string | string[]) => async (req: Request, res: Response, next: NextFunction) => {
   try {
     const admin = req.admin;
-    console.log(`[authorizeMenuAccess] RoleId=${admin?.RoleId} Menu=${menuName}`);
+    const menus = Array.isArray(menuNames) ? menuNames : [menuNames];
+
     if (
       !admin ||
       typeof admin.RoleId === "undefined" ||
@@ -69,25 +70,30 @@ export const authorizeMenuAccess = (menuName: string) => async (req: Request, re
     ) {
       return next(new AuthError("Admin RoleId not found in token", 401));
     }
-    if (!menuName) return next(new AuthError("Menu name is required in middleware", 400));
+    if (!menus.length) return next(new AuthError("Menu name(s) is required in middleware", 400));
 
-    console.log("[authorizeMenuAccess] admin:", admin);
-    // Cari MenuId by Name
-    const menu = await prisma.menu.findFirst({ where: { Name: menuName } });
-    console.log("[authorizeMenuAccess] menu:", menu);
-    if (!menu) return next(new AuthError("Menu not found", 404));
+    let authorized = false;
+    let lastMenuId: number | null = null;
+    for (const menuName of menus) {
+      const menu = await prisma.menu.findFirst({ where: { Name: menuName } });
+      if (!menu) continue;
+      const roleAccess = await prisma.roleMenuAccess.findFirst({
+        where: { MenuId: menu.Id, RoleId: admin.RoleId },
+      });
+      if (roleAccess && roleAccess.Access !== "NONE") {
+        authorized = true;
+        lastMenuId = menu.Id;
+        break;
+      }
+    }
 
-    // Cek akses di RoleMenuAccess
-    const roleAccess = await prisma.roleMenuAccess.findFirst({
-      where: { MenuId: menu.Id, RoleId: admin.RoleId },
-    });
-    console.log(`[authorizeMenuAccess] RoleAccess:`, roleAccess);
-    if (!roleAccess || roleAccess.Access === "NONE") {
+    if (!authorized) {
       return next(new AuthError("Unauthorized: No menu access", 403));
     }
 
-    // Simpan menuId jika mau dipakai berikutnya
-    (req as any).menuId = menu.Id;
+    // Optional: Simpan menuId terakhir yang lolos akses, jika mau dipakai handler berikutnya
+    (req as any).menuId = lastMenuId;
+
     next();
   } catch (err) {
     return next(new AuthError("Failed to verify menu access", 403));

@@ -63,6 +63,9 @@ interface SalesOrderDetail {
   TaxId?: number | null;
   TaxPercentage?: number | null;
   TaxName?: string | null;
+  Warehouse?: number | null; // Tambahkan ini jika perlu
+  WarehouseId?: number | null;
+  warehouseOptions?: { Id: number; Name: string; QtyOnHand: number }[];
 }
 
 interface EmailRecipient {
@@ -79,6 +82,8 @@ const ApprovalSalesOrder: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [updateDetails, setUpdateDetails] = useState<SalesOrderDetail[]>([]);
+  const [warehouseOptions, setWarehouseOptions] = useState<{ Id: number; Name: string; QtyOnHand: number }[][]>([]);
+  const [selectedWarehouses, setSelectedWarehouses] = useState<(number | null)[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -185,6 +190,15 @@ const ApprovalSalesOrder: React.FC = () => {
     // eslint-disable-next-line
   }, [showModal]);
 
+  useEffect(() => {
+    setWarehouseOptions(Array(updateDetails.length).fill([]));
+    setSelectedWarehouses(Array(updateDetails.length).fill(null));
+    updateDetails.forEach((d, idx) => {
+      fetchWarehouseForItemCode(d.ItemCodeId, idx);
+    });
+    // eslint-disable-next-line
+  }, [updateDetails]);
+
   const fetchSessionAndSalesOrders = async () => {
     const token = localStorage.getItem("token");
     if (!token) {
@@ -250,6 +264,7 @@ const ApprovalSalesOrder: React.FC = () => {
               TaxId: d.TaxId ?? null,
               TaxPercentage: d.TaxPercentage ?? null,
               TaxName: d.TaxName ?? null,
+              WarehouseId: d.Warehouse ?? d.WarehouseId ?? null,
             })) || [],
           }))
         );
@@ -294,7 +309,49 @@ const ApprovalSalesOrder: React.FC = () => {
   };
 
 
-
+  const fetchWarehouseForItemCode = async (itemCodeId: number, index: number) => {
+    if (!itemCodeId) {
+      setWarehouseOptions(prev => {
+        const upd = [...prev];
+        upd[index] = [];
+        return upd;
+      });
+      return;
+    }
+    try {
+      const response = await axios.post("http://localhost:3000/api/admin/admin/salesorder/approval/fetchwarehouseforitemcode", { ItemCodeId: itemCodeId });
+      const result = response.data;
+      if (result?.success && Array.isArray(result.data)) {
+        setWarehouseOptions(prev => {
+          const upd = [...prev];
+          upd[index] = result.data;
+          return upd;
+        });
+        // Ambil WarehouseId default dari detail, atau fallback ke pertama jika tidak ada/0
+        setSelectedWarehouses(prev => {
+          const upd = [...prev];
+          let defaultWarehouseId = null;
+          if (updateDetails[index]) {
+            defaultWarehouseId = updateDetails[index].WarehouseId ?? updateDetails[index].Warehouse ?? null;
+          }
+          // Ubah logika: Kalau null, langsung set ke null/empty, jangan pakai warehouse pertama!
+          if (defaultWarehouseId == null) {
+            upd[index] = null; // <<== ini kunci!
+          } else {
+            const warehouseIds = result.data.map((w: { Id: any; }) => w.Id);
+            upd[index] = warehouseIds.includes(defaultWarehouseId) ? defaultWarehouseId : null;
+          }
+          return upd;
+        });
+      }
+    } catch (err) {
+      setWarehouseOptions(prev => {
+        const upd = [...prev];
+        upd[index] = [];
+        return upd;
+      });
+    }
+  };
 
   const fetchActiveTax = async () => {
     try {
@@ -390,12 +447,13 @@ const ApprovalSalesOrder: React.FC = () => {
         CustomerPoNumber: selectedOrder?.CustomerPoNumber,
         DeliveryOrderNumber: selectedOrder?.DeliveryOrderNumber,
         ForceApplyTax: forceApplyTax,
-        SalesOrderDetails: updateDetails.map((detail) => {
+        SalesOrderDetails: updateDetails.map((detail, idx) => {
           const obj: any = {
             Quantity: detail.Quantity,
             Price: detail.Price,
             ItemCodeId: detail.ItemCodeId,
             PriceCategoryId: detail.PriceCategoryId ?? null,
+            WarehouseId: selectedWarehouses[idx] ? selectedWarehouses[idx] : null,
           };
           if (detail.Id) obj.Id = detail.Id; // hanya masukkan jika edit
           return obj;
@@ -477,12 +535,13 @@ const ApprovalSalesOrder: React.FC = () => {
         CustomerPoNumber: selectedOrder?.CustomerPoNumber,
         DeliveryOrderNumber: selectedOrder?.DeliveryOrderNumber,
         ForceApplyTax: forceApplyTax,
-        SalesOrderDetails: updateDetails.map((detail) => {
+        SalesOrderDetails: updateDetails.map((detail, idx) => {
           const obj: any = {
             Quantity: detail.Quantity,
             Price: detail.Price,
             ItemCodeId: detail.ItemCodeId,
             PriceCategoryId: detail.PriceCategoryId ?? null,
+            WarehouseId: selectedWarehouses[idx] ? selectedWarehouses[idx] : null,
           };
           if (detail.Id) obj.Id = detail.Id; // hanya masukkan jika edit
           return obj;
@@ -1047,6 +1106,29 @@ const ApprovalSalesOrder: React.FC = () => {
                                 handleDetailChange(index, "Price", parseFloat(e.target.value) || 0)
                               }
                             />
+                          </td>
+                          <td className="border px-2 py-1 align-top">
+                            <select
+                              className="w-full border px-2 py-1 rounded"
+                              value={selectedWarehouses[index] == null ? "" : selectedWarehouses[index]} // gunakan nullish coalescing untuk default ""
+                              onChange={e => {
+                                const val = e.target.value ? parseInt(e.target.value) : null;
+                                setSelectedWarehouses(prev => {
+                                  const upd = [...prev];
+                                  upd[index] = val;
+                                  return upd;
+                                });
+                              }}
+
+                            >
+                              <option value="">No Warehouse</option>
+                              {warehouseOptions[index]?.length > 0 &&
+                                warehouseOptions[index].map(w => (
+                                  <option key={w.Id} value={w.Id}>
+                                    {w.Name} ({w.QtyOnHand})
+                                  </option>
+                                ))}
+                            </select>
                           </td>
                           <td className="border px-2 py-1 bg-gray-50 text-gray-800 align-top">
                             Rp {detail.FinalPrice.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

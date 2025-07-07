@@ -34,7 +34,8 @@ const Transaction = () => {
   const [dropdownOpen, setDropdownOpen] = useState([]);
   const [forceApplyTax, setForceApplyTax] = useState(false);
   const [activeTax, setActiveTax] = useState(null);
-
+  const [warehouseOptions, setWarehouseOptions] = useState([[]]); // list array warehouse per item
+  const [selectedWarehouses, setSelectedWarehouses] = useState([]);
   const [deletingId, setDeletingId] = useState(null);
   const [deleteMsg, setDeleteMsg] = useState("");
 
@@ -102,6 +103,37 @@ const Transaction = () => {
     }
   };
 
+  const handleEditOrder = async (order) => {
+    // 1. Normalisasi detail
+    const mappedDetails = Array.isArray(order.SalesOrderDetails)
+      ? order.SalesOrderDetails.map((d) => ({
+        ...d,
+        ItemCode: { Id: d.ItemCodeId, Name: d.ItemName || (d.ItemCode && d.ItemCode.Name) },
+        TaxId: d.TaxId ?? null,
+        TaxPercentage: d.TaxPercentage ?? null,
+        TaxName: d.TaxName ?? null,
+      }))
+      : [];
+
+    // 2. Fetch warehouseOptions per detail paralel (pakai Promise.all)
+    const allWarehouseOptions = await Promise.all(
+      mappedDetails.map((d, idx) =>
+        fetchWarehouseForItemCodeSync(d.ItemCodeId, idx)
+      )
+    );
+
+    // 3. Default selected warehouse (dari detail)
+    const selectedWarehousesNow = mappedDetails.map(d => d.WarehouseId ?? d.Warehouse ?? null);
+
+    // 4. Set state (urutan penting)
+    setSelectedOrder(order);
+    setUpdateDetails(mappedDetails);
+    setWarehouseOptions(allWarehouseOptions);
+    setSelectedWarehouses(selectedWarehousesNow);
+
+    // 5. Modal baru muncul **setelah semua siap**
+    setShowModal(true);
+  };
 
   const handleFilterChange = (e) => {
     setFilters({ ...filters, [e.target.name]: e.target.value });
@@ -166,7 +198,68 @@ const Transaction = () => {
   };
 
 
+  const fetchWarehouseForItemCode = async (itemCodeId, index) => {
+    if (!itemCodeId) {
+      setWarehouseOptions(prev => {
+        const upd = [...prev];
+        upd[index] = [];
+        return upd;
+      });
+      return;
+    }
+    try {
+      const res = await axios.post(
+        "/api/admin/admin/salesorder/approval/fetchwarehouseforitemcode",
+        { ItemCodeId: itemCodeId }
+      );
+      const result = res.data;
+      if (result?.success && Array.isArray(result.data)) {
+        setWarehouseOptions(prev => {
+          const upd = [...prev];
+          upd[index] = result.data;
+          return upd;
+        });
+        // default warehouseId (dari detail), atau null
+        setSelectedWarehouses(prev => {
+          const upd = [...prev];
+          let defaultWarehouseId = null;
+          if (updateDetails[index]) {
+            defaultWarehouseId = updateDetails[index].WarehouseId ?? updateDetails[index].Warehouse ?? null;
+          }
+          if (defaultWarehouseId == null) {
+            upd[index] = null;
+          } else {
+            const ids = result.data.map(w => w.Id);
+            upd[index] = ids.includes(defaultWarehouseId) ? defaultWarehouseId : null;
+          }
+          return upd;
+        });
+      }
+    } catch {
+      setWarehouseOptions(prev => {
+        const upd = [...prev];
+        upd[index] = [];
+        return upd;
+      });
+    }
+  };
 
+  const fetchWarehouseForItemCodeSync = async (itemCodeId, index) => {
+    if (!itemCodeId) return [];
+    try {
+      const res = await axios.post(
+        "/api/admin/admin/salesorder/approval/fetchwarehouseforitemcode",
+        { ItemCodeId: itemCodeId }
+      );
+      const result = res.data;
+      if (result?.success && Array.isArray(result.data)) {
+        return result.data;
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  };
 
   const handleUpdate = async () => {
     try {
@@ -181,13 +274,14 @@ const Transaction = () => {
         CustomerPoNumber: selectedOrder?.CustomerPoNumber,
         DeliveryOrderNumber: selectedOrder?.DeliveryOrderNumber,
         ForceApplyTax: forceApplyTax,
-        SalesOrderDetails: updateDetails.map((detail) => ({
+        SalesOrderDetails: updateDetails.map((detail, idx) => ({
           Id: detail.Id,
           Quantity: detail.Quantity,
           Price: detail.Price,
           FinalPrice: detail.FinalPrice,
           ItemCodeId: detail.ItemCodeId,
           PriceCategoryId: detail.PriceCategoryId ?? null,
+          WarehouseId: selectedWarehouses[idx] ? selectedWarehouses[idx] : null,
         })),
       };
 
@@ -376,21 +470,7 @@ const Transaction = () => {
                 <td className="border p-2">
                   {canEdit && (
                     <button
-                      onClick={() => {
-                        setSelectedOrder(order);
-                        setUpdateDetails(
-                          Array.isArray(order.SalesOrderDetails)
-                            ? order.SalesOrderDetails.map((d) => ({
-                              ...d,
-                              ItemCode: { Id: d.ItemCodeId, Name: d.ItemName || (d.ItemCode && d.ItemCode.Name) },
-                              TaxId: d.TaxId ?? null,
-                              TaxPercentage: d.TaxPercentage ?? null,
-                              TaxName: d.TaxName ?? null,
-                            }))
-                            : []
-                        );
-                        setShowModal(true);
-                      }}
+                      onClick={() => handleEditOrder(order)}
                       className="bg-blue-500 text-white px-3 py-1 rounded mr-2"
                     >
                       Edit
@@ -601,6 +681,7 @@ const Transaction = () => {
                         <th className="border px-3 py-2 text-left">Item Code</th>
                         <th className="border px-3 py-2 text-left">Quantity</th>
                         <th className="border px-3 py-2 text-left">Price</th>
+                        <th className="border px-3 py-2 text-left">Warehouse</th>
                         <th className="border px-3 py-2 text-left">Final Price</th>
                         <th className="border px-3 py-2 text-left">Action</th>
                       </tr>
@@ -691,6 +772,27 @@ const Transaction = () => {
                               }
                             />
                           </td>
+                          <td className="border px-2 py-1 align-top">
+                            <select
+                              className="w-full border px-2 py-1 rounded"
+                              value={selectedWarehouses[index] == null ? "" : selectedWarehouses[index]}
+                              onChange={e => {
+                                const val = e.target.value ? parseInt(e.target.value) : null;
+                                setSelectedWarehouses(prev => {
+                                  const upd = [...prev];
+                                  upd[index] = val;
+                                  return upd;
+                                });
+                              }}
+                            >
+                              <option value="">No Warehouse</option>
+                              {warehouseOptions[index]?.map(w => (
+                                <option key={w.Id} value={w.Id}>
+                                  {w.Name} ({w.QtyOnHand})
+                                </option>
+                              ))}
+                            </select>
+                          </td>
                           <td className="border px-2 py-1 bg-gray-50 text-gray-800 align-top">
                             Rp {detail.FinalPrice.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
@@ -698,15 +800,11 @@ const Transaction = () => {
                             <button
                               type="button"
                               onClick={() => {
-                                setUpdateDetails(prev =>
-                                  prev.filter((_, i) => i !== index)
-                                );
-                                setDropdownOpen(prev =>
-                                  prev.filter((_, i) => i !== index)
-                                );
-                                setItemCodeOptions(prev =>
-                                  prev.filter((_, i) => i !== index)
-                                );
+                                setUpdateDetails(prev => prev.filter((_, i) => i !== index));
+                                setDropdownOpen(prev => prev.filter((_, i) => i !== index));
+                                setItemCodeOptions(prev => prev.filter((_, i) => i !== index));
+                                setWarehouseOptions(prev => prev.filter((_, i) => i !== index));
+                                setSelectedWarehouses(prev => prev.filter((_, i) => i !== index));
                               }}
                               className="text-red-600 hover:text-red-800 font-bold text-2xl leading-none w-10 h-10 flex items-center justify-center mx-auto"
                               title="Remove Item"
@@ -729,18 +827,17 @@ const Transaction = () => {
                   </table>
                   <button
                     onClick={() => {
-                      setUpdateDetails([
-                        ...updateDetails,
-                        {
-                          ItemCodeId: 0,
-                          ItemCode: { Id: 0, Name: "Pilih Item Code", PartNumberId: 0 },
-                          Quantity: 1,
-                          Price: 0,
-                          FinalPrice: 0,
-                        },
-                      ]);
+                      setUpdateDetails([...updateDetails, {
+                        ItemCodeId: 0,
+                        ItemCode: { Id: 0, Name: "Pilih Item Code", PartNumberId: 0 },
+                        Quantity: 1,
+                        Price: 0,
+                        FinalPrice: 0,
+                      }]);
                       setDropdownOpen([...dropdownOpen, false]);
                       setItemCodeOptions([...itemCodeOptions, []]);
+                      setWarehouseOptions([...warehouseOptions, []]);
+                      setSelectedWarehouses([...selectedWarehouses, null]);
                     }}
                     className="mt-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition duration-150"
                   >

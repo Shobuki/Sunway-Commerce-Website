@@ -11,13 +11,14 @@ import {
     updateSalesOrder,
     getAllSalesOrders,
     deleteSalesOrder,
-
+    
 } from "../../../controllers/dealer-api/transaction/salesorder"; // ✅ Import dengan benar
 
 import {
     approveSalesOrder,
     rejectSalesOrder,
     updateSalesOrderApproval,
+    fetchWarehouseForItemCode
 } from "../../../controllers/admin-api/managesalesorder/salesorderapproval"; // ✅ Import dengan benar
 
 import {
@@ -71,6 +72,12 @@ router.put(
   adminAuth,
   authorizeMenuFeatureAccess("approvesalesorder", "reviewsalesorder"),
   updateSalesOrderApproval
+);
+router.post(
+  "/salesorder/approval/fetchwarehouseforitemcode",
+  adminAuth,
+  authorizeMenuAccess(["approvesalesorder", "salesorder"]),
+  fetchWarehouseForItemCode
 );
 
 // Create, Update, Delete
