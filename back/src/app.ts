@@ -22,13 +22,16 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    console.log('CORS Origin:', origin);
-    console.log('AllowedOrigins:', allowedOrigins);
-    console.log('IndexOf:', allowedOrigins.indexOf(origin ?? ''));
+    console.log('========== CORS DEBUG ==========');
+    console.log('CORS Origin:', origin, '| length:', origin ? origin.length : '-');
+    for (const o of allowedOrigins) {
+      console.log('Allowed:', o, '| length:', o.length, '| match:', o === origin);
+    }
     if (!origin || allowedOrigins.includes(origin)) {
+      console.log('>>> ALLOWED', origin);
       callback(null, true);
     } else {
-      console.log('CORS BLOCKED ORIGIN:', origin);
+      console.log('>>> BLOCKED', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
