@@ -42,7 +42,11 @@ const CheckoutPage = () => {
   const router = useRouter();
 
   const [orderRules, setOrderRules] = useState<Record<number, { min: number; step: number }>>({});
-  const [taxPercentage, setTaxPercentage] = useState<number>(0);
+
+  const [activeTaxes, setActiveTaxes] = useState<Record<number, { Id: number; Name: string; Percentage: number }>>({});
+  const [uniqueTax, setUniqueTax] = useState<{ Id: number, Percentage: number, Name: string } | null>(null);
+  const [taxError, setTaxError] = useState<string | null>(null);
+
   // Konstanta untuk tarif pajak (11%)
 
   useEffect(() => {
@@ -50,24 +54,6 @@ const CheckoutPage = () => {
   }, []);
   const token = typeof window !== "undefined" ? sessionStorage.getItem('userToken') : null;
 
-  useEffect(() => {
-    // Fetch tax dari API
-    const fetchActiveTax = async () => {
-      try {
-        const res = await fetch('/api/admin/admin/salesorder/tax/getactive');
-        const result = await res.json();
-        if (result?.data && typeof result.data.Percentage === 'number') {
-          setTaxPercentage(result.data.Percentage);
-        } else {
-          setTaxPercentage(0); // fallback tanpa pajak
-        }
-      } catch (e) {
-        setTaxPercentage(0);
-      }
-    };
-
-    fetchActiveTax();
-  }, []);
 
 
   useEffect(() => {
@@ -78,20 +64,53 @@ const CheckoutPage = () => {
   useEffect(() => {
     if (!cart) return;
 
+    // Setiap kali cart berubah, reset tax
+    setActiveTaxes({});
+    setUniqueTax(null);
+    setTaxError(null);
+
     const fetchAllRules = async () => {
+      let foundTaxes: { Id: number; Name: string; Percentage: number }[] = [];
       for (const item of cart.CartItems) {
         const id = item.ItemCodeId;
-        if (!orderRules[id]) {
-          try {
-            await fetchOrderRules(id);
-          } catch (err) {
-            console.error(`Gagal mengambil aturan untuk item ${id}:`, err);
+        try {
+          const rulesData = await fetchOrderRules(id);
+
+          // Ambil tax dari API rules (ActiveTax di response)
+          if (rulesData && rulesData.ActiveTax) {
+            foundTaxes.push({
+              Id: rulesData.ActiveTax.Id,
+              Name: rulesData.ActiveTax.Name,
+              Percentage: rulesData.ActiveTax.Percentage
+            });
+            setActiveTaxes(prev => ({
+              ...prev,
+              [id]: {
+                Id: rulesData.ActiveTax.Id,
+                Name: rulesData.ActiveTax.Name,
+                Percentage: rulesData.ActiveTax.Percentage
+              }
+            }));
           }
+        } catch (err) {
+          // skip
         }
+      }
+
+      // Cek semua tax harus sama
+      const uniqueList = [
+        ...new Map(foundTaxes.map(tax => [tax.Id + '-' + tax.Percentage, tax])).values()
+      ];
+      if (uniqueList.length === 1) {
+        setUniqueTax(uniqueList[0]);
+        setTaxError(null);
+      } else if (uniqueList.length > 1) {
+        setTaxError('Pajak tidak konsisten pada semua item, silakan hubungi admin.');
       }
     };
 
     fetchAllRules();
+    // eslint-disable-next-line
   }, [cart]);
 
   const fetchCart = async () => {
@@ -247,8 +266,10 @@ const CheckoutPage = () => {
   ) || 0;
 
   // Perhitungan Pajak
+  const taxPercentage = uniqueTax?.Percentage || 0;
   const taxAmount = grandTotalPrice * (taxPercentage / 100);
   const finalTotalPrice = grandTotalPrice + taxAmount;
+
 
   return (
     <div className="min-h-screen bg-gray-50 relative">
@@ -292,7 +313,11 @@ const CheckoutPage = () => {
 
       <div className="container mx-auto py-8 pt-25 px-4 md:px-0">
         <h1 className="text-2xl font-bold mb-4">Checkout</h1>
-
+        {taxError && (
+          <div className="mb-4 text-red-600 font-semibold border border-red-300 bg-red-50 p-3 rounded">
+            {taxError}
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Kolom Kiri: Daftar Item Keranjang */}
           <div className="md:col-span-2">
@@ -445,7 +470,7 @@ const CheckoutPage = () => {
               <button
                 onClick={handleSubmitOrder}
                 className="mt-6 w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg text-lg font-semibold transition duration-200 ease-in-out"
-                disabled={!cart || cart.CartItems.length === 0}
+                disabled={!cart || cart.CartItems.length === 0 || !!taxError} // PATCH DI SINI!
               >
                 Kirim Pesanan
               </button>

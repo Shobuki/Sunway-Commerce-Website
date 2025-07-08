@@ -433,6 +433,14 @@ export const getOrderRules = async (req: Request, res: Response) => {
   const dealerId = user.Dealer.Id;
   const priceCategoryId = user.Dealer.PriceCategoryId;
 
+  // === Tambah di sini ===
+  const activeTax = await prisma.tax.findFirst({
+    where: {
+      IsActive: true,
+      DeletedAt: null,
+    },
+  });
+
   // 3. Ambil detail item beserta semua kombinasi harga & stok
   const item = await prisma.itemCode.findUnique({
     where: { Id: Number(ItemCodeId) },
@@ -464,7 +472,7 @@ export const getOrderRules = async (req: Request, res: Response) => {
 
     // Cari wholesale info
     let minWholesale = null, maxWholesale = null;
-    const priceObj = item.Price.find(p => 
+    const priceObj = item.Price.find(p =>
       p.DealerId === dealerId && p.WholesalePrices && p.WholesalePrices.length > 0
     );
     if (priceObj && priceObj.WholesalePrices.length > 0) {
@@ -530,6 +538,7 @@ export const getOrderRules = async (req: Request, res: Response) => {
       TotalStock: null,
       PriceValid: false,
       StockValid: false,
+      ActiveTax: activeTax,
     });
     return;
   }
@@ -562,6 +571,7 @@ export const getOrderRules = async (req: Request, res: Response) => {
     MaxQtyWholesale: maxWholesale,
     PriceValid: chosenPrice.price > 0,
     StockValid: chosenStock >= (Quantity ?? 1),
+    ActiveTax: activeTax,
     Message: "OK",
   });
 };

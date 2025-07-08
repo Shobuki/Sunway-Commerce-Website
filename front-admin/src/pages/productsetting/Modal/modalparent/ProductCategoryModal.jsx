@@ -59,7 +59,7 @@ const ModalProductCategory = ({ onClose }) => {
       }
     }
   };
-  
+
 
 
   const handleEdit = (category) => {
@@ -232,7 +232,7 @@ const ModalProductCategory = ({ onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-y-auto">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b">
           <h2 className="text-2xl font-bold text-gray-800">
@@ -289,72 +289,95 @@ const ModalProductCategory = ({ onClose }) => {
                 </option>
               ))}
             </select>
-            
+
 
           </div>
         </form>
 
-        {/* ✅ Upload & preview image */}
-        {formData.Id && (
-          <div className="px-6 pt-4 border-b">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Upload Image for Selected Category
-            </label>
-            <div className="flex items-center gap-3">
-              <input type="file" accept="image/*" onChange={(e) => setUploadFile(e.target.files[0])} />
-              <button
-                type="button"
-                onClick={handleUploadImage}
-                className={`${buttonStyle} bg-green-600 text-white hover:bg-green-700`}
-              >
-                <FiUpload />
-                Upload
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-4 pt-3">
-              {categoryImages.map((img) => (
-                <div key={img.Id} className="relative group w-24 h-24 rounded overflow-hidden border">
-                  <img
-                    src={`http://${window.location.hostname}:3000${img.ImageUrl}`}
-                    alt="category"
-                    className="w-full h-full object-cover"
-                  />
-                  <button
-                    onClick={() => handleDeleteImage(img.Id)}
-                    className="absolute top-1 right-1 bg-white text-red-600 rounded-full p-1 shadow hover:bg-red-100"
-                  >
-                    <FiTrash2 />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
 
         {/* Scrollable Category List */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          <h3 className="text-lg font-semibold">Existing Categories</h3>
-
-          <div className="flex items-center gap-2">
-            <FiSearch className="text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search categories..."
-              className={`${inputStyle}`}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-
-          <div className="border rounded-lg p-4 bg-gray-50 mt-2">
-            {filteredCategories.length > 0 ? (
-              filteredCategories.map((category) => renderCategory(category))
-            ) : (
-              <div className="text-center text-gray-500 py-4">
-                No categories found
+        <div className="flex-1 p-6 overflow-y-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* LEFT COLUMN: Upload & preview image */}
+            <div>
+              {formData.Id && (
+                <div className="bg-gray-50 border rounded-lg p-4 mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Upload Image for Selected Category
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setUploadFile(e.target.files[0])}
+                      className="block w-full"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleUploadImage}
+                      className={`${buttonStyle} bg-green-600 text-white hover:bg-green-700`}
+                    >
+                      <FiUpload />
+                      Upload
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-4 pt-3">
+                    {categoryImages.length === 0 && (
+                      <div className="text-gray-400 text-xs italic">
+                        No images uploaded.
+                      </div>
+                    )}
+                    {categoryImages.map((img) => (
+                      <div key={img.Id} className="relative group w-24 h-24 rounded overflow-hidden border bg-white">
+                        <img
+                          src={`http://${window.location.hostname}:3000${img.ImageUrl}`}
+                          alt="category"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          onClick={() => handleDeleteImage(img.Id)}
+                          className="absolute top-1 right-1 bg-white text-red-600 rounded-full p-1 shadow hover:bg-red-100"
+                          title="Delete Image"
+                        >
+                          <FiTrash2 />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* RIGHT COLUMN: Category List */}
+            <div className="flex flex-col">
+              <h3 className="text-lg font-semibold mb-3">Existing Categories</h3>
+              <div className="flex items-center gap-2 mb-4">
+                <FiSearch className="text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search categories..."
+                  className={inputStyle}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
-            )}
+              <div
+                className="border rounded-lg p-4 bg-gray-50"
+                style={{
+                  maxHeight: '440px',
+                  minHeight: '300px',
+                  overflowY: 'auto',
+                }}
+              >
+                {filteredCategories.length > 0 ? (
+                  filteredCategories.map((category) => renderCategory(category))
+                ) : (
+                  <div className="text-center text-gray-500 py-4">
+                    No categories found
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
