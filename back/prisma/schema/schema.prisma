@@ -3,16 +3,16 @@ generator client {
   previewFeatures = ["multiSchema", "prismaSchemaFolder"]
 }
 
-generator erd {
-  provider = "prisma-erd-generator"
-  output   = "./erd"
-  format   = "mermaid"
-  mmdcPath = "(function)"
-}
+//generator erd {
+ // provider = "prisma-erd-generator"
+ // output   = "./erd"
+ // format   = "mermaid"
+ // mmdcPath = "(function)"
+//}
 
-generator dbml {
-  provider = "prisma-dbml-generator"
-}
+//generator dbml {
+ // provider = "prisma-dbml-generator"
+//}
 
 datasource db {
   provider = "postgresql"

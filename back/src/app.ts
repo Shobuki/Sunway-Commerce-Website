@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import dotenv from "dotenv";
 import cors from 'cors';
 import path from 'path';
 import adminApiRouter from './routes/admin-api'; // Router admin-api
@@ -6,7 +7,7 @@ import dealerApiRouter from './routes/dealer-api';
 import authenticateToken from './middlewares/admin/authenticateToken'; // Middleware autentikasi
 
 const app = express();
-
+require('dotenv').config();
 function getClientIp(origin: string | undefined): string {
   if (!origin) return 'NO_ORIGIN_HEADER';
   try {
