@@ -1,0 +1,11 @@
+cd back
+call npm install
+cd ..
+cd front-admin
+call npm install
+cd ..
+cd frontdealer
+call npm install
+cd ..
+echo DONE
+pause
