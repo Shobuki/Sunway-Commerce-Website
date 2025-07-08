@@ -49,7 +49,7 @@ export const requestForgotPasswordAdmin = async (req: Request, res: Response) =>
   });
 
   // Replace template variables
-  const resetUrl = `http://localhost:3001/reset-password/${token}`;
+  const resetUrl = `http://sunflexstoreindonesia.com:3001/reset-password/${token}`;
   const subject = template.Subject || "Reset your password";
   const body = (template.Body || "")
     .replace("{{link}}", resetUrl)

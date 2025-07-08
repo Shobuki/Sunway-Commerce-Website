@@ -319,7 +319,7 @@ const ApprovalSalesOrder: React.FC = () => {
       return;
     }
     try {
-      const response = await axios.post("http://localhost:3000/api/admin/admin/salesorder/approval/fetchwarehouseforitemcode", { ItemCodeId: itemCodeId });
+      const response = await axios.post("/api/admin/admin/salesorder/approval/fetchwarehouseforitemcode", { ItemCodeId: itemCodeId });
       const result = response.data;
       if (result?.success && Array.isArray(result.data)) {
         setWarehouseOptions(prev => {

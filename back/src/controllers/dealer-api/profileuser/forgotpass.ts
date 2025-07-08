@@ -44,7 +44,7 @@ export const requestForgotPassword = async (req: Request, res: Response) => {
     },
   });
 
-  const resetUrl = `http://localhost:3002/reset-password/${token}`;
+  const resetUrl = `http://sunflexstoreindonesia.com:3002/reset-password/${token}`;
   const subject = template.Subject || "Reset your password";
   const body = (template.Body || "")
     .replace("{{link}}", resetUrl)

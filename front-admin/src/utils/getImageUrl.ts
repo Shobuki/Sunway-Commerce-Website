@@ -4,7 +4,7 @@ export function getImageUrl(imagePath?: string) {
 
   // Fallback ke localhost jika env tidak di-set atau kosong/null/undefined
   if (!baseUrl) {
-    baseUrl = "http://localhost:3000";
+    baseUrl = "http://sunflexstoreindonesia.com:3000";
   }
 
   if (!imagePath) return "";
