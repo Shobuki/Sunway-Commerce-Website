@@ -2,14 +2,14 @@ import React, { useState, useEffect } from "react";
 import axios from "@/utils/axios";
 import { hasMenuAccess, hasFeatureAccess } from "@/utils/access";
 
-const EditStock = ({ item, onClose, onSave }) => {
-  const [qtyPO, setQtyPO] = useState(item.QtyPO || 0);
+const EditStock = ({ item = {}, onClose, onSave }) => {
+  const [qtyPO, setQtyPO] = useState(item?.QtyPO ?? 0);
   const [warehouseStocks, setWarehouseStocks] = useState(
-    item.WarehouseStocks?.map(ws => ({
+    item?.WarehouseStocks?.map(ws => ({
       WarehouseId: ws.WarehouseId,
-      QtyOnHand: ws.QtyOnHand || 0,
+      QtyOnHand: ws.QtyOnHand ?? 0,
       Warehouse: ws.Warehouse
-    })) || []
+    })) ?? []
   );
   const [warehouses, setWarehouses] = useState([]);
   const [searchWarehouse, setSearchWarehouse] = useState("");

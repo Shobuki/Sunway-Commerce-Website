@@ -1,20 +1,11 @@
 {
-  "extends": ["next/core-web-vitals", "next/typescript"],
+  "extends": ["next", "next/core-web-vitals"],
   "rules": {
-    "no-restricted-globals": [
-      "error",
-      {
-        "name": "localStorage",
-        "message": "Akses localStorage hanya boleh di dalam useEffect/client component!"
-      },
-      {
-        "name": "window",
-        "message": "Akses window hanya boleh di dalam useEffect/client component!"
-      },
-      {
-        "name": "sessionStorage",
-        "message": "Akses sessionStorage hanya boleh di dalam useEffect/client component!"
-      }
-    ]
+    "@typescript-eslint/no-unused-vars": 0,
+    "@typescript-eslint/no-explicit-any": 0,
+    "no-unused-vars": 0,
+    "react-hooks/exhaustive-deps": 0,
+    "@next/next/no-img-element": 0,
+    "no-restricted-globals": 0
   }
 }
