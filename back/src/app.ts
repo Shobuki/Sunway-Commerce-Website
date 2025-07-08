@@ -1,51 +1,38 @@
 import dotenv from "dotenv";
-require('dotenv').config();
+dotenv.config(); // ✅ lebih konsisten
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
-import adminApiRouter from './routes/admin-api'; // Router admin-api
+
+import adminApiRouter from './routes/admin-api';
 import dealerApiRouter from './routes/dealer-api';
-import authenticateToken from './middlewares/admin/authenticateToken'; // Middleware autentikasi
 
 const app = express();
-require('dotenv').config();
-function getClientIp(origin: string | undefined): string {
-  if (!origin) return 'NO_ORIGIN_HEADER';
-  try {
-    const url = new URL(origin);
-    return url.hostname;
-  } catch (err) {
-    return 'INVALID_ORIGIN';
-  }
-}
 
-// Middleware CORS
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      console.log("🛰️ Origin Header:", origin); // asal domain (jika ada)
-      console.log("🌐 IP Request:", getClientIp(origin)); // asal IP
-      const allowedOrigins = [
-        'http://localhost:3001',
-        'http://localhost:3002',
-        'http://sunflexstoreindonesia.com',
-        'http://sunflexstoreindonesia.com:3001',
-        'http://sunflexstoreindonesia.com:3002',
-        'https://sunflexstoreindonesia.com',   // Jika sudah support https
-      ];
+const allowedOrigins = [
+  'http://localhost:3001',
+  'http://localhost:3002',
+  'http://sunflexstoreindonesia.com:3001',
+  'http://sunflexstoreindonesia.com:3002',
+  'https://sunflexstoreindonesia.com',
+  'http://sunflexstoreindonesia.com',
+  'https://sunflexstoreindonesia.com:3001',
+  'https://sunflexstoreindonesia.com:3002',
+];
 
-
-
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    credentials: true, // Enable if cookies or authorization headers are needed
-  })
-);
+// Middleware CORS -- PANGGIL SEKALI SAJA!
+app.use(cors({
+  origin: (origin, callback) => {
+    console.log('CORS Origin:', origin);
+    if (!origin || allowedOrigins.some(o => origin && origin.startsWith(o))) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  credentials: true,
+}));
 
 // Middleware JSON and URL-encoded parsing
 app.use(express.json());
