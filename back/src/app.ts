@@ -25,7 +25,7 @@ app.use(
     origin: (origin, callback) => {
       console.log("🛰️ Origin Header:", origin); // asal domain (jika ada)
       console.log("🌐 IP Request:", getClientIp(origin)); // asal IP
-      const allowedOrigins = ['http://localhost:3001','http://localhost:3002'];
+      const allowedOrigins = ['http://localhost:3001','http://localhost:3002','sunflexstoreindonesia.com','http://sunflexstoreindonesia.com:3001','http://sunflexstoreindonesia.com:3002'];
 
 
   
