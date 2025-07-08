@@ -23,10 +23,12 @@ const allowedOrigins = [
 app.use(cors({
   origin: (origin, callback) => {
     console.log('CORS Origin:', origin);
+    console.log('AllowedOrigins:', allowedOrigins);
+    console.log('IndexOf:', allowedOrigins.indexOf(origin ?? ''));
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.log('CORS BLOCKED ORIGIN:', origin); // Tambahkan debug!
+      console.log('CORS BLOCKED ORIGIN:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
