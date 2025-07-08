@@ -20,13 +20,13 @@ const allowedOrigins = [
   'https://sunflexstoreindonesia.com:3002',
 ];
 
-// Middleware CORS -- PANGGIL SEKALI SAJA!
 app.use(cors({
   origin: (origin, callback) => {
     console.log('CORS Origin:', origin);
-    if (!origin || allowedOrigins.some(o => origin && origin.startsWith(o))) {
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.log('CORS BLOCKED ORIGIN:', origin); // Tambahkan debug!
       callback(new Error('Not allowed by CORS'));
     }
   },
