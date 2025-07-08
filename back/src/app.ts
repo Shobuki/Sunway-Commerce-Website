@@ -25,10 +25,17 @@ app.use(
     origin: (origin, callback) => {
       console.log("🛰️ Origin Header:", origin); // asal domain (jika ada)
       console.log("🌐 IP Request:", getClientIp(origin)); // asal IP
-      const allowedOrigins = ['http://localhost:3001','http://localhost:3002','sunflexstoreindonesia.com','http://sunflexstoreindonesia.com:3001','http://sunflexstoreindonesia.com:3002'];
+      const allowedOrigins = [
+        'http://localhost:3001',
+        'http://localhost:3002',
+        'http://sunflexstoreindonesia.com',
+        'http://sunflexstoreindonesia.com:3001',
+        'http://sunflexstoreindonesia.com:3002',
+        'https://sunflexstoreindonesia.com',   // Jika sudah support https
+      ];
 
 
-  
+
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -58,7 +65,7 @@ app.use('/images/product/itemcode/itemcodeimage', express.static(path.join(__dir
 app.use('/images/profile', express.static(path.join(__dirname, '../public/admin/images/profile')));
 
 //middleware profile image user
-app.use ('/images/user/profile', express.static(path.join(__dirname, '../public/dealer/images/profile')));
+app.use('/images/user/profile', express.static(path.join(__dirname, '../public/dealer/images/profile')));
 
 //middleware dll (blm guna)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
