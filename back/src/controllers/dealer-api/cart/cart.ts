@@ -497,6 +497,7 @@ export const getOrderRules = async (req: Request, res: Response) => {
       MaxQtyWholesale: maxWholesale,
       PriceValid: resolved.price > 0,
       StockValid: totalStock >= (Quantity ?? 1),
+      ActiveTax: activeTax,
       Message:
         resolved.price === 0
           ? "Tidak ada harga aktif untuk dealer dan quantity ini."
