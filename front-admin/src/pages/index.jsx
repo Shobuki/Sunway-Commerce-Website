@@ -11,7 +11,7 @@ const Home = () => {
       <div className="flex flex-col flex-grow">
 
       <main className="w-full bg-gray-100 flex flex-col items-center justify-center text-center py-12">
-  <h1 className="text-2xl font-bold">Welcome to Sunflex Admin</h1>
+  <h1 className="text-2xl font-bold text-black">Welcome to Sunflex Admin</h1>
   <p className="mt-4 text-gray-600">
     Manage your application from here. Use the sidebar to navigate between sections.
   </p>

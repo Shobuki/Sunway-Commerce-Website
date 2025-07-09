@@ -51,7 +51,7 @@ const ResetAdminPasswordPage = () => {
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
       <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
         <div className="flex justify-center mb-6">
-          <img src="/images/logo/sunway-logo.png" alt="Sunway Logo" width={200} height={80} />
+          <img src="/images/logo.png" alt="Sunway Logo" width={200} height={80} />
         </div>
         <h2 className="text-2xl font-bold text-red-600 mb-2 text-center">Reset Password Admin</h2>
         <p className="text-gray-600 text-sm mb-4 text-center">Untuk: <span className="font-semibold">{email || '...'}</span></p>

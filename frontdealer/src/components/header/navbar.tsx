@@ -13,10 +13,7 @@ const Navbar = () => {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [userData, setUserData] = useState<{
-    Image?: string;
-    Name?: string;
-  } | null>(null);
+  const [userData, setUserData] = useState<{ Image?: string; Name?: string; } | null>(null);
 
   useEffect(() => {
     const checkAuthAndProfile = async () => {
@@ -92,18 +89,18 @@ const Navbar = () => {
 
   return (
     <nav className="bg-white border-b shadow-sm fixed w-full top-0 z-50">
-      <div className="container mx-auto flex justify-between items-center py-3 px-4 md:px-6 ml-30">
+      <div className="max-w-7xl mx-auto flex justify-between items-center py-2 px-2 md:px-6">
         {/* Logo */}
         <Link href="/home" className="flex-shrink-0">
           <img
             src="/images/logo/sunway-logo.png"
             alt="Sunway Logo"
-            className="h-10 w-auto hover:opacity-80 transition-opacity"
+            className="h-9 w-auto hover:opacity-80 transition-opacity"
           />
         </Link>
 
         {/* Desktop Navigation */}
-        <div className="hidden md:flex space-x-6 text-[15px] font-medium text-gray-600">
+        <div className="hidden md:flex space-x-4 text-[15px] font-medium text-gray-600">
           {navLinks.map(link => (
             <Link key={link.href} href={link.href} className="hover:text-red-600 transition-colors">
               {link.label}
@@ -111,49 +108,50 @@ const Navbar = () => {
           ))}
         </div>
 
-        {/* Mobile menu button */}
-        <button
-          className="md:hidden p-2 ml-2 rounded text-gray-700 hover:bg-gray-100 focus:outline-none"
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          aria-label="Open menu"
-        >
-          {isMobileMenuOpen ? <CloseIcon size={28} /> : <MenuIcon size={28} />}
-        </button>
+        {/* Right Section (Cart, Profile/Login) */}
+        <div className="flex items-center space-x-1">
+          {/* Cart */}
+          <div
+            className="relative group cursor-pointer text-gray-600 hover:text-red-600 transition-colors"
+            onClick={() => setIsCartOpen(!isCartOpen)}
+          >
+            <ShoppingCart size={22} />
+            <div className={`absolute right-0 ${isCartOpen ? 'opacity-100 visible' : 'opacity-0 invisible'} transition-all duration-200 mt-2 z-50`}>
+              <CartPopup isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
+            </div>
+          </div>
 
-        {/* Right Section (Cart & Profile) */}
-        <div className="flex items-center space-x-3 ml-2">
+          {/* Profile/Login */}
           {isLoggedIn ? (
-            <>
-              <div
-                className="relative group cursor-pointer text-gray-600 hover:text-red-600 transition-colors"
-                onClick={() => setIsCartOpen(!isCartOpen)}
-              >
-                <ShoppingCart size={22} />
-                <div className={`absolute right-0 ${isCartOpen ? 'opacity-100 visible' : 'opacity-0 invisible'} transition-all duration-200 mt-2`}>
-                  <CartPopup isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
-                </div>
-              </div>
-              <div className="relative">
-                <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="flex items-center gap-2 focus:outline-none">
-                  {userData?.Image ? (
-                    <img src={userData.Image} alt="Profile" className="w-9 h-9 bg-white rounded shadow border border-gray-200 object-contain p-1" />
-                  ) : (
-                    <div className="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center text-red-600">
-                      <User size={18} />
-                    </div>
-                  )}
-                </button>
-                {isProfileOpen && <ProfileDropdown />}
-              </div>
-            </>
+            <div className="relative ml-2">
+              <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="flex items-center gap-2 focus:outline-none">
+                {userData?.Image ? (
+                  <img src={userData.Image} alt="Profile" className="w-9 h-9 bg-white rounded shadow border border-gray-200 object-contain p-1" />
+                ) : (
+                  <div className="h-8 w-8 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+                    <User size={18} />
+                  </div>
+                )}
+              </button>
+              {isProfileOpen && <ProfileDropdown />}
+            </div>
           ) : isLoggedIn === false ? (
-            <Link href="/login" className="flex items-center gap-1 px-4 py-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors text-sm font-medium">
+            <Link href="/login" className="flex items-center gap-1 px-3 py-1 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors text-sm font-medium ml-2">
               <User size={16} className="stroke-2" />
               <span>Login</span>
             </Link>
           ) : (
-            <div className="h-8 w-8 bg-gray-100 rounded-full animate-pulse" />
+            <div className="h-8 w-8 bg-gray-100 rounded-full animate-pulse ml-2" />
           )}
+
+          {/* Mobile menu button */}
+          <button
+            className="md:hidden p-2 ml-1 rounded text-gray-700 hover:bg-gray-100 focus:outline-none"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label="Open menu"
+          >
+            {isMobileMenuOpen ? <CloseIcon size={26} /> : <MenuIcon size={26} />}
+          </button>
         </div>
       </div>
 
@@ -162,7 +160,7 @@ const Navbar = () => {
         className={`fixed inset-0 z-40 bg-black bg-opacity-40 md:hidden transition-all duration-300 ${isMobileMenuOpen ? "block" : "hidden"}`}
         onClick={() => setIsMobileMenuOpen(false)}
       >
-        <div className="fixed top-0 left-0 w-64 h-full bg-white shadow-md z-50 p-6 pt-8"
+        <div className="fixed top-0 left-0 w-64 max-w-full h-full bg-white shadow-md z-50 p-6 pt-8"
           onClick={e => e.stopPropagation()}
         >
           <button className="absolute top-4 right-4 text-gray-600" onClick={() => setIsMobileMenuOpen(false)}>
@@ -179,6 +177,28 @@ const Navbar = () => {
                 {link.label}
               </Link>
             ))}
+            {/* LOGIN/PROFILE BUTTON JUGA DI MOBILE */}
+            {isLoggedIn ? (
+              <button
+                onClick={() => {
+                  setIsProfileOpen(true);
+                  setIsMobileMenuOpen(false);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-full text-gray-800"
+              >
+                {userData?.Image ? (
+                  <img src={userData.Image} alt="Profile" className="w-8 h-8 rounded-full object-cover" />
+                ) : (
+                  <User size={18} />
+                )}
+                <span>{userData?.Name || "Profile"}</span>
+              </button>
+            ) : (
+              <Link href="/login" className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors text-base font-medium">
+                <User size={18} />
+                <span>Login</span>
+              </Link>
+            )}
           </div>
         </div>
       </div>

@@ -28,7 +28,7 @@ const ProductCarousel = ({
           <Link
             key={product.Id}
             href={`/product/${product.Id}`}
-            className="group block bg-white rounded-xl shadow-lg hover:shadow-xl transition p-4 relative"
+            className="group block bg-white rounded-xl shadow-lg hover:shadow-xl transition p-3 sm:p-4 relative"
           >
 
             <div className="font-semibold text-base text-gray-800 truncate">{product.Name}</div>
@@ -308,7 +308,7 @@ const Home = () => {
   return (
     <>
       <Navbar />
-      <div className="container mx-auto py-8 px-2 md:px-0 background-white ">
+      <div className="container mx-auto py-8 px-2 md:px-0 bg-white min-h-screen pt-20">
         <h1 className="text-3xl font-bold mb-4 text-gray-800">Our Products</h1>
         <p className="text-gray-600 mb-8">
           Browse product categories below, or search for products directly.
@@ -337,7 +337,7 @@ const Home = () => {
           {/* Kategori filter */}
           <div className="flex-1">
             <select
-              className="w-full border rounded px-3 py-2"
+              className="w-full border rounded px-2 py-2 text-sm"
               value={selectedCategoryId}
               onChange={e =>
                 setSelectedCategoryId(e.target.value === '0' ? 'all' : parseInt(e.target.value))
@@ -354,7 +354,7 @@ const Home = () => {
           <div className="flex-1">
             <input
               type="text"
-              className="w-full border rounded px-3 py-2"
+              className="w-full border rounded px-2 py-2 text-sm"
               placeholder="Search for products..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
