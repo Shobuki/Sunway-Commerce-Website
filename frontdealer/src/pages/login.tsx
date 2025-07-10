@@ -157,7 +157,7 @@ const Login = () => {
         {error && <p className="text-red-500 mb-4">{error}</p>}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label htmlFor="identifier" className="block text-gray-700 font-semibold">
+            <label htmlFor="identifier" className="block text-black font-semibold">
               Username or Email
             </label>
             <input
@@ -170,7 +170,7 @@ const Login = () => {
             />
           </div>
           <div>
-            <label htmlFor="password" className="block text-gray-700 font-semibold">
+            <label htmlFor="password" className="block text-black font-semibold">
               Password
             </label>
             <input

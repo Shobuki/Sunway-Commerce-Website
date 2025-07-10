@@ -339,7 +339,7 @@ const PopupChoose: React.FC<{ productId: number; onClose?: () => void }> = ({ pr
                 const manualQty = Number(e.target.value);
                 setQuantity(manualQty);
               }}
-              className="px-2 py-1 border border-red-500 rounded w-16 text-center"
+              className="px-2 py-1 border border-red-500 rounded w-16 text-center text-black"
               step={stepOrder}
               min={minOrder}
             />
