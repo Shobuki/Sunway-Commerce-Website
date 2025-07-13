@@ -4,6 +4,30 @@ import Navbar from '../components/header/navbar';
 import Footer from '../components/footer';
 import { getImageUrl } from '../utils/getBaseURL';
 
+
+// === Custom sort untuk part number (letakkan sebelum komponen/component apapun) ===
+function extractCodeAndNumber(name: string) {
+  const match = name.match(/^([A-Z]+)(\d+)/i);
+  if (match) {
+    return {
+      prefix: match[1].toUpperCase(),
+      number: parseInt(match[2], 10)
+    };
+  }
+  return { prefix: name.toUpperCase(), number: Infinity }; // Non-number last
+}
+
+function comparePartNumber(a: { Name: string; }, b: { Name: string; }) {
+  const pa = extractCodeAndNumber(a.Name);
+  const pb = extractCodeAndNumber(b.Name);
+
+  if (pa.prefix === pb.prefix) {
+    return pa.number - pb.number;
+  }
+  if (pa.prefix < pb.prefix) return -1;
+  if (pa.prefix > pb.prefix) return 1;
+  return a.Name.localeCompare(b.Name);
+}
 // --- Simple Carousel Komponen ---
 const ProductCarousel = ({
   products,
@@ -20,6 +44,7 @@ const ProductCarousel = ({
     page * itemsPerPage,
     page * itemsPerPage + itemsPerPage
   );
+
 
   return (
     <div className="relative">
@@ -146,7 +171,7 @@ const Home = () => {
             const imgData = await res.json();
             const imageUrl =
               imgData && imgData.data && Array.isArray(imgData.data) &&
-              imgData.data.length > 0 && imgData.data[0].ImageUrl
+                imgData.data.length > 0 && imgData.data[0].ImageUrl
                 ? getImageUrl(imgData.data[0].ImageUrl)
                 : null;
 
@@ -172,7 +197,7 @@ const Home = () => {
         // Urut produk dan anak-anak
         processedCategories.forEach(category => {
           if (category.Products) {
-            category.Products.sort((a: { Name: string; }, b: { Name: any; }) => a.Name.localeCompare(b.Name));
+            category.Products.sort(comparePartNumber);
           }
           const sortChildren = (children?: ProductCategory[]) => {
             if (!children) return;
@@ -279,9 +304,8 @@ const Home = () => {
           )}
         </button>
         <div
-          className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            isOpen ? 'max-h-[999px] opacity-100 mt-2' : 'max-h-0 opacity-0'
-          }`}
+          className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-[999px] opacity-100 mt-2' : 'max-h-0 opacity-0'
+            }`}
         >
           {category.Products?.length > 0 && (
             <ul className="list-disc list-inside text-gray-700 space-y-1 ml-4">
@@ -327,40 +351,40 @@ const Home = () => {
           </div>
         </div>
 
-       
+
 
         {/* --- CAROUSEL HASIL FILTER/SEARCH --- */}
         <div className="mb-12">
           <h2 className="text-xl font-bold text-gray-700 mb-3">Product Results</h2>
-           {/* --- FILTER DAN SEARCH BAR --- */}
-        <div className="flex flex-col md:flex-row gap-4 mb-8">
-          {/* Kategori filter */}
-          <div className="flex-1">
-            <select
-              className="w-full border rounded px-2 py-2 text-sm"
-              value={selectedCategoryId}
-              onChange={e =>
-                setSelectedCategoryId(e.target.value === '0' ? 'all' : parseInt(e.target.value))
-              }
-            >
-              {categoryOptions.map(opt => (
-                <option key={opt.Id} value={opt.Id}>
-                  {opt.Name}
-                </option>
-              ))}
-            </select>
+          {/* --- FILTER DAN SEARCH BAR --- */}
+          <div className="flex flex-col md:flex-row gap-4 mb-8">
+            {/* Kategori filter */}
+            <div className="flex-1">
+              <select
+                className="w-full border rounded px-2 py-2 text-sm"
+                value={selectedCategoryId}
+                onChange={e =>
+                  setSelectedCategoryId(e.target.value === '0' ? 'all' : parseInt(e.target.value))
+                }
+              >
+                {categoryOptions.map(opt => (
+                  <option key={opt.Id} value={opt.Id}>
+                    {opt.Name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {/* Search bar */}
+            <div className="flex-1">
+              <input
+                type="text"
+                className="w-full border rounded px-2 py-2 text-sm"
+                placeholder="Search for products..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+            </div>
           </div>
-          {/* Search bar */}
-          <div className="flex-1">
-            <input
-              type="text"
-              className="w-full border rounded px-2 py-2 text-sm"
-              placeholder="Search for products..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-            />
-          </div>
-        </div>
           {filteredProducts.length > 0 ? (
             <ProductCarousel products={filteredProducts} itemsPerPage={12} />
           ) : (
