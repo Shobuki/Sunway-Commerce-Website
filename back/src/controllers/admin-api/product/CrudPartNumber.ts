@@ -104,32 +104,33 @@ class PartNumber {
         res.status(400).json({ message: "Name is required & max 40 chars." });
         return;
       }
-      if (Dash !== undefined && (isNaN(Number(Dash)) || Number(Dash) < 0 || String(Dash).replace('.', '').length > 7)) {
-        res.status(400).json({ message: "Dash must be positive number & max 7 digits." });
+      // Tidak perlu cek angka harus positif! Hanya panjang digit saja:
+      if (Dash !== undefined && (String(Dash).replace('.', '').replace('-', '').length > 7)) {
+        res.status(400).json({ message: "Dash max 7 digits." });
         return;
       }
-      if (InnerDiameter !== undefined && (isNaN(Number(InnerDiameter)) || Number(InnerDiameter) < 0 || String(InnerDiameter).replace('.', '').length > 7)) {
-        res.status(400).json({ message: "InnerDiameter must be positive number & max 7 digits." });
+      if (InnerDiameter !== undefined && (String(InnerDiameter).replace('.', '').replace('-', '').length > 7)) {
+        res.status(400).json({ message: "InnerDiameter max 7 digits." });
         return;
       }
-      if (OuterDiameter !== undefined && (isNaN(Number(OuterDiameter)) || Number(OuterDiameter) < 0 || String(OuterDiameter).replace('.', '').length > 7)) {
-        res.status(400).json({ message: "OuterDiameter must be positive number & max 7 digits." });
+      if (OuterDiameter !== undefined && (String(OuterDiameter).replace('.', '').replace('-', '').length > 7)) {
+        res.status(400).json({ message: "OuterDiameter max 7 digits." });
         return;
       }
-      if (WorkingPressure !== undefined && (isNaN(Number(WorkingPressure)) || Number(WorkingPressure) < 0 || String(WorkingPressure).replace('.', '').length > 10)) {
-        res.status(400).json({ message: "WorkingPressure must be positive number & max 10 digits." });
+      if (WorkingPressure !== undefined && (String(WorkingPressure).replace('.', '').replace('-', '').length > 10)) {
+        res.status(400).json({ message: "WorkingPressure max 10 digits." });
         return;
       }
-      if (BurstingPressure !== undefined && (isNaN(Number(BurstingPressure)) || Number(BurstingPressure) < 0 || String(BurstingPressure).replace('.', '').length > 10)) {
-        res.status(400).json({ message: "BurstingPressure must be positive number & max 10 digits." });
+      if (BurstingPressure !== undefined && (String(BurstingPressure).replace('.', '').replace('-', '').length > 10)) {
+        res.status(400).json({ message: "BurstingPressure max 10 digits." });
         return;
       }
-      if (BendingRadius !== undefined && (isNaN(Number(BendingRadius)) || Number(BendingRadius) < 0 || String(BendingRadius).replace('.', '').length > 10)) {
-        res.status(400).json({ message: "BendingRadius must be positive number & max 10 digits." });
+      if (BendingRadius !== undefined && (String(BendingRadius).replace('.', '').replace('-', '').length > 10)) {
+        res.status(400).json({ message: "BendingRadius max 10 digits." });
         return;
       }
-      if (HoseWeight !== undefined && (isNaN(Number(HoseWeight)) || Number(HoseWeight) < 0 || String(HoseWeight).replace('.', '').length > 10)) {
-        res.status(400).json({ message: "HoseWeight must be positive number & max 10 digits." });
+      if (HoseWeight !== undefined && (String(HoseWeight).replace('.', '').replace('-', '').length > 10)) {
+        res.status(400).json({ message: "HoseWeight max 10 digits." });
         return;
       }
 
@@ -179,32 +180,33 @@ class PartNumber {
         res.status(400).json({ message: "Name max 40 chars." });
         return;
       }
-      if (Dash !== undefined && (isNaN(Number(Dash)) || Number(Dash) < 0 || String(Dash).replace('.', '').length > 7)) {
-        res.status(400).json({ message: "Dash must be positive number & max 7 digits." });
+      // Hanya validasi jumlah digit/karakter saja
+      if (Dash !== undefined && (String(Dash).replace('.', '').replace('-', '').length > 7)) {
+        res.status(400).json({ message: "Dash max 7 digits." });
         return;
       }
-      if (InnerDiameter !== undefined && (isNaN(Number(InnerDiameter)) || Number(InnerDiameter) < 0 || String(InnerDiameter).replace('.', '').length > 7)) {
-        res.status(400).json({ message: "InnerDiameter must be positive number & max 7 digits." });
+      if (InnerDiameter !== undefined && (String(InnerDiameter).replace('.', '').replace('-', '').length > 7)) {
+        res.status(400).json({ message: "InnerDiameter max 7 digits." });
         return;
       }
-      if (OuterDiameter !== undefined && (isNaN(Number(OuterDiameter)) || Number(OuterDiameter) < 0 || String(OuterDiameter).replace('.', '').length > 7)) {
-        res.status(400).json({ message: "OuterDiameter must be positive number & max 7 digits." });
+      if (OuterDiameter !== undefined && (String(OuterDiameter).replace('.', '').replace('-', '').length > 7)) {
+        res.status(400).json({ message: "OuterDiameter max 7 digits." });
         return;
       }
-      if (WorkingPressure !== undefined && (isNaN(Number(WorkingPressure)) || Number(WorkingPressure) < 0 || String(WorkingPressure).replace('.', '').length > 10)) {
-        res.status(400).json({ message: "WorkingPressure must be positive number & max 10 digits." });
+      if (WorkingPressure !== undefined && (String(WorkingPressure).replace('.', '').replace('-', '').length > 10)) {
+        res.status(400).json({ message: "WorkingPressure max 10 digits." });
         return;
       }
-      if (BurstingPressure !== undefined && (isNaN(Number(BurstingPressure)) || Number(BurstingPressure) < 0 || String(BurstingPressure).replace('.', '').length > 10)) {
-        res.status(400).json({ message: "BurstingPressure must be positive number & max 10 digits." });
+      if (BurstingPressure !== undefined && (String(BurstingPressure).replace('.', '').replace('-', '').length > 10)) {
+        res.status(400).json({ message: "BurstingPressure max 10 digits." });
         return;
       }
-      if (BendingRadius !== undefined && (isNaN(Number(BendingRadius)) || Number(BendingRadius) < 0 || String(BendingRadius).replace('.', '').length > 10)) {
-        res.status(400).json({ message: "BendingRadius must be positive number & max 10 digits." });
+      if (BendingRadius !== undefined && (String(BendingRadius).replace('.', '').replace('-', '').length > 10)) {
+        res.status(400).json({ message: "BendingRadius max 10 digits." });
         return;
       }
-      if (HoseWeight !== undefined && (isNaN(Number(HoseWeight)) || Number(HoseWeight) < 0 || String(HoseWeight).replace('.', '').length > 10)) {
-        res.status(400).json({ message: "HoseWeight must be positive number & max 10 digits." });
+      if (HoseWeight !== undefined && (String(HoseWeight).replace('.', '').replace('-', '').length > 10)) {
+        res.status(400).json({ message: "HoseWeight max 10 digits." });
         return;
       }
       if (ProductId !== undefined && (isNaN(Number(ProductId)) || Number(ProductId) <= 0)) {
