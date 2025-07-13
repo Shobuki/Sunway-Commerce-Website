@@ -7,15 +7,19 @@ import { getImageUrl } from '../utils/getBaseURL';
 
 // === Custom sort untuk part number (letakkan sebelum komponen/component apapun) ===
 function extractCodeAndNumber(name: string) {
-  const match = name.match(/^([A-Z]+)(\d+)/i);
+  // Cari kode part setelah dash, atau di seluruh string jika tidak ada dash
+  // Contoh match: "AH300", "WDH300", "WSD150", dll.
+  // Ambil yang pertama ditemukan saja
+  const match = name.match(/([A-Z]+)(\d+)/i);
   if (match) {
     return {
       prefix: match[1].toUpperCase(),
       number: parseInt(match[2], 10)
     };
   }
-  return { prefix: name.toUpperCase(), number: Infinity }; // Non-number last
+  return { prefix: name.toUpperCase(), number: Infinity }; // Untuk produk tanpa angka
 }
+
 
 function comparePartNumber(a: { Name: string; }, b: { Name: string; }) {
   const pa = extractCodeAndNumber(a.Name);
@@ -24,10 +28,9 @@ function comparePartNumber(a: { Name: string; }, b: { Name: string; }) {
   if (pa.prefix === pb.prefix) {
     return pa.number - pb.number;
   }
-  if (pa.prefix < pb.prefix) return -1;
-  if (pa.prefix > pb.prefix) return 1;
-  return a.Name.localeCompare(b.Name);
+  return pa.prefix.localeCompare(pb.prefix);
 }
+
 // --- Simple Carousel Komponen ---
 const ProductCarousel = ({
   products,
@@ -203,7 +206,7 @@ const Home = () => {
             if (!children) return;
             children.forEach(child => {
               if (child.Products) {
-                child.Products.sort((a, b) => a.Name.localeCompare(b.Name));
+                child.Products.sort(comparePartNumber); // <-- PENTING!
               }
               if (child.Children?.length) {
                 sortChildren(child.Children);
