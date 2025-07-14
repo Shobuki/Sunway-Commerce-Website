@@ -10,6 +10,8 @@ import dealerApiRouter from './routes/dealer-api';
 const app = express();
 
 const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
   'http://sunflexstoreindonesia.com:3001',
   'http://sunflexstoreindonesia.com:3002',
   'https://sunflexstoreindonesia.com',

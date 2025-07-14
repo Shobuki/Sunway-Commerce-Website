@@ -112,6 +112,7 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
       res.status(400).json({ message: "SalesId must be a valid number." });
       return;
     }
+
     const updateData: any = {};
     if (SalesOrderNumber !== undefined) updateData.SalesOrderNumber = SalesOrderNumber;
     if (JdeSalesOrderNumber !== undefined) updateData.JdeSalesOrderNumber = JdeSalesOrderNumber;
@@ -200,7 +201,9 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
       const toDeleteIds = existingIds.filter(id => !incomingIds.includes(id));
 
       // Reversal stok untuk setiap detail yang akan dihapus (deleteMany)
-      if (toDeleteIds.length > 0) {
+      const currentStatus = salesOrder.Status; // setelah fetch salesOrder di atas
+
+      if (toDeleteIds.length > 0 && currentStatus === SalesOrderStatus.APPROVED_EMAIL_SENT) {
         const toBeDeletedDetails = existingDetails.filter(d => toDeleteIds.includes(d.Id));
         for (const old of toBeDeletedDetails) {
           if (old.FulfillmentStatus === "READY" && old.WarehouseId) {
@@ -241,7 +244,7 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
         const taxRateToUse = ForceApplyTax ? defaultTaxRate : 0;
         const finalPrice = detail.Price * detail.Quantity * (1 + taxRateToUse / 100);
 
-        if (detail.Id && detail.Quantity > 0 && detail.Price) {
+        if (detail.Id && detail.Quantity === 0 && currentStatus === SalesOrderStatus.APPROVED_EMAIL_SENT) {
           await prisma.salesOrderDetail.update({
             where: { Id: detail.Id },
             data: {
@@ -431,11 +434,20 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
     }
 
     // Ambil detail sales order lengkap untuk update stok
-    for (const detail of SalesOrderDetails) {
-      if (detail.FulfillmentStatus !== "READY") continue;
+    const dbDetails = await prisma.salesOrderDetail.findMany({
+      where: { SalesOrderId: parsedSalesOrderId },
+    });
 
-      if (detail.WarehouseId) {
-        // --- Kurangi stok langsung di warehouseId yang sudah dipilih
+    console.log("========= DEBUG DETAIL DB FOR STOCK ==========");
+    console.log("dbDetails:", JSON.stringify(dbDetails, null, 2));
+
+    for (const detail of dbDetails) {
+      if (
+        detail.FulfillmentStatus === "READY" &&
+        detail.WarehouseId &&
+        detail.Quantity > 0
+      ) {
+        console.log("MASUK PENGURANGAN STOK:", detail);
         const stock = await prisma.warehouseStock.findFirst({
           where: {
             WarehouseId: detail.WarehouseId,
@@ -443,9 +455,25 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
             QtyOnHand: { gte: detail.Quantity }
           }
         });
-        if (!stock) throw new Error(
-          `Stock tidak cukup di warehouseId ${detail.WarehouseId} untuk ItemCodeId ${detail.ItemCodeId}`
-        );
+        console.log('PENGURANGAN STOK', {
+          warehouseStockId: stock?.Id,
+          warehouseId: detail.WarehouseId,
+          itemCodeId: detail.ItemCodeId,
+          qtyBefore: stock?.QtyOnHand,
+          qtyKurang: detail.Quantity
+        });
+        if (!stock) {
+          throw new Error(
+            `Stock tidak cukup di warehouseId ${detail.WarehouseId} untuk ItemCodeId ${detail.ItemCodeId}`
+          );
+        }
+        console.log('PENGURANGAN STOK', {
+          warehouseStockId: stock?.Id,
+          warehouseId: detail.WarehouseId,
+          itemCodeId: detail.ItemCodeId,
+          qtyBefore: stock?.QtyOnHand,
+          qtyKurang: detail.Quantity
+        });
         await prisma.warehouseStock.update({
           where: { Id: stock.Id },
           data: { QtyOnHand: { decrement: detail.Quantity } }
@@ -460,65 +488,8 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
             AdminId: adminId,
           }
         });
-        continue;
+        console.log(`[STOK BERHASIL DIKURANGI] ${detail.ItemCodeId} - ${detail.Quantity} dari Warehouse ${detail.WarehouseId}`);
       }
-
-      // --- Jika warehouseId masih null, fallback ke logic prioritas dealerWarehouse
-      const dealerWarehouses = await prisma.dealerWarehouse.findMany({
-        where: { DealerId: dealerId },
-        orderBy: [{ Priority: "asc" }]
-      });
-
-      let selectedWarehouse = null;
-      for (const dw of dealerWarehouses) {
-        const stock = await prisma.warehouseStock.findFirst({
-          where: {
-            WarehouseId: dw.WarehouseId,
-            ItemCodeId: detail.ItemCodeId,
-            QtyOnHand: { gte: detail.Quantity }
-          }
-        });
-        if (stock) {
-          selectedWarehouse = { WarehouseId: dw.WarehouseId, QtyOnHand: stock.QtyOnHand, stockId: stock.Id };
-          break;
-        }
-      }
-      if (!selectedWarehouse) {
-        // Fallback ke stok terbanyak
-        const stock = await prisma.warehouseStock.findFirst({
-          where: { ItemCodeId: detail.ItemCodeId, QtyOnHand: { gte: detail.Quantity } },
-          orderBy: { QtyOnHand: "desc" }
-        });
-        if (stock) {
-          selectedWarehouse = { WarehouseId: stock.WarehouseId, QtyOnHand: stock.QtyOnHand, stockId: stock.Id };
-        }
-      }
-      if (!selectedWarehouse) {
-        throw new Error(
-          `Stock tidak cukup untuk ItemCodeId ${detail.ItemCodeId} pada semua gudang`
-        );
-      }
-
-      // Update detail supaya warehouseId terisi
-      await prisma.salesOrderDetail.update({
-        where: { Id: detail.Id },
-        data: { WarehouseId: selectedWarehouse.WarehouseId }
-      });
-
-      await prisma.warehouseStock.update({
-        where: { Id: selectedWarehouse.stockId },
-        data: { QtyOnHand: { decrement: detail.Quantity } }
-      });
-      await prisma.stockHistory.create({
-        data: {
-          WarehouseStockId: selectedWarehouse.stockId,
-          ItemCodeId: detail.ItemCodeId,
-          QtyBefore: selectedWarehouse.QtyOnHand,
-          QtyAfter: selectedWarehouse.QtyOnHand - detail.Quantity,
-          Note: `Kurangi stok saat Approval SalesOrder #${parsedSalesOrderId} (warehouseId ${selectedWarehouse.WarehouseId})`,
-          AdminId: adminId,
-        }
-      });
     }
 
     await prisma.salesOrder.update({
@@ -725,7 +696,7 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
     } else {
       res.status(400).json({ message: "Stock sudah berhasil update, tetapi ada email yang gagal terkirim. Status tidak berubah." });
     }
-
+    console.log("========= END DEBUG ==========");
   } catch (error) {
     console.error("Error approving Sales Order:", error);
     res.status(500).json({ message: "Internal Server Error." });
@@ -898,7 +869,9 @@ export const updateSalesOrderApproval = async (req: Request, res: Response): Pro
       const toDeleteIds = existingIds.filter(id => !incomingIds.includes(id));
 
       // --- Reversal stok untuk setiap detail yang akan dihapus (deleteMany)
-      if (toDeleteIds.length > 0) {
+      const previousStatus = oldOrder.Status; // setelah fetch oldOrder
+
+      if (toDeleteIds.length > 0 && previousStatus === SalesOrderStatus.APPROVED_EMAIL_SENT) {
         const toBeDeletedDetails = existingDetails.filter(d => toDeleteIds.includes(d.Id));
         for (const old of toBeDeletedDetails) {
           if (old.FulfillmentStatus === "READY" && old.WarehouseId) {
@@ -934,7 +907,7 @@ export const updateSalesOrderApproval = async (req: Request, res: Response): Pro
         const taxRateToUse = ForceApplyTax ? defaultTaxRate : 0;
         const finalPrice = detail.Price * detail.Quantity * (1 + taxRateToUse / 100);
 
-        if (detail.Id && detail.Quantity > 0 && detail.Price) {
+        if (detail.Id && detail.Quantity === 0 && previousStatus === SalesOrderStatus.APPROVED_EMAIL_SENT) {
           await prisma.salesOrderDetail.update({
             where: { Id: detail.Id },
             data: {
