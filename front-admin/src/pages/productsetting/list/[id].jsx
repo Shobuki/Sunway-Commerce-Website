@@ -20,6 +20,9 @@ const ProductDetail = () => {
 
   const [menuAccess, setMenuAccess] = useState(null);
   const [loadingAccess, setLoadingAccess] = useState(true);
+  const [specFiles, setSpecFiles] = useState([]);
+
+  const [specUploading, setSpecUploading] = useState(false);
 
   useEffect(() => {
     // Ambil akses menu "product"
@@ -43,6 +46,10 @@ const ProductDetail = () => {
       fetchProductImages();
       fetchPartNumbers();
     }
+  }, [id]);
+
+  useEffect(() => {
+    if (id) fetchSpecificationFiles();
   }, [id]);
 
   const fetchProductDetail = async () => {
@@ -76,6 +83,66 @@ const ProductDetail = () => {
       setPartNumbers(res.data.data.PartNumber || []);
     } catch (err) {
       console.error("Error fetching part numbers:", err);
+    }
+  };
+
+  const fetchSpecificationFiles = async () => {
+    if (!id) return;
+    try {
+      const res = await axios.post("/api/admin/admin/products/specification-files/product", { ProductId: id });
+      setSpecFiles(res.data.files || []);
+    } catch (err) {
+      setSpecFiles([]);
+    }
+  };
+
+  const handleSpecUpload = async (event) => {
+    const files = event.target.files;
+    if (!files || !files.length) return;
+    const formData = new FormData();
+    formData.append("ProductId", id);
+    for (let i = 0; i < files.length; i++) {
+      formData.append("file", files[i]);
+    }
+    try {
+      setSpecUploading(true);
+      await axios.post("/api/admin/admin/products/specification-files/upload", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      fetchSpecificationFiles();
+    } catch (err) {
+      //
+    } finally {
+      setSpecUploading(false);
+    }
+  };
+
+  const handleSpecDownload = async (fileId, fileName) => {
+    try {
+      const response = await axios.post(
+        "/api/admin/admin/products/specification-files/download",
+        { Id: fileId },
+        { responseType: "blob" }
+      );
+      // Trigger download
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      alert("Failed to download file");
+    }
+  };
+
+  const handleSpecDelete = async (fileId) => {
+    try {
+      await axios.post("/api/admin/admin/products/specification-files/delete", { Id: fileId });
+      setSpecFiles(specFiles.filter((f) => f.Id !== fileId));
+    } catch (err) {
+      alert("Failed to delete file");
     }
   };
 
@@ -175,6 +242,74 @@ const ProductDetail = () => {
           <p className="text-gray-500">No images available.</p>
         )}
       </div>
+
+      <div className="mt-8">
+        <h2 className="text-xl font-semibold mb-3">Product Specification Files</h2>
+        {/* UPLOAD BUTTON */}
+        {hasFeatureAccess(menuAccess, "editproduct") && (
+          <label className="bg-blue-500 text-white px-5 py-2.5 rounded-md cursor-pointer hover:bg-blue-600 transition-all font-semibold inline-flex items-center gap-2">
+            {specUploading ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Uploading...
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd"></path></svg>
+                Upload Spec File
+              </>
+            )}
+            <input type="file" className="hidden" multiple onChange={handleSpecUpload} disabled={specUploading} />
+          </label>
+        )}
+
+        {/* SPEC FILES TABLE */}
+        {specFiles.length > 0 ? (
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-sm border border-gray-300">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="py-2 px-3 border-b text-left">File Name</th>
+                  <th className="py-2 px-3 border-b text-left">Type</th>
+                  <th className="py-2 px-3 border-b text-left">Uploaded At</th>
+                  <th className="py-2 px-3 border-b"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {specFiles.map((f) => (
+                  <tr key={f.Id}>
+                    <td className="py-2 px-3 border-b">{f.FileName}</td>
+                    <td className="py-2 px-3 border-b">{f.MimeType}</td>
+                    <td className="py-2 px-3 border-b">{new Date(f.UploadedAt).toLocaleString()}</td>
+                    <td className="py-2 px-3 border-b flex gap-2">
+                      <button
+                        onClick={() => handleSpecDownload(f.Id, f.FileName)}
+                        className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-md text-xs"
+                      >
+                        Download
+                      </button>
+                      {hasFeatureAccess(menuAccess, "editproduct") && (
+                        <button
+                          onClick={() => handleSpecDelete(f.Id)}
+                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-gray-500 mt-2">No specification files.</p>
+        )}
+      </div>
+
 
       <div className="mt-4">
         {hasFeatureAccess(menuAccess, "editproduct") && (

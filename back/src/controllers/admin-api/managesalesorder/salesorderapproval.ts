@@ -79,6 +79,83 @@ async function reversalSalesOrderStock(salesOrderId: number, adminId: number) {
   }
 }
 
+//fungsi untuk reversal stok pada sales order detail ketika pindah warehouse
+async function patchReversalWarehouseChange(
+  details: any[],
+  oldMap: Map<any, any>,
+  salesOrderId: number,
+  adminId: number
+) {
+  for (const detail of details) {
+    if (!detail.Id || !detail.Quantity || detail.FulfillmentStatus !== "READY") continue;
+
+    const old = oldMap.get(detail.Id);
+    if (!old) continue;
+
+    // ItemCode BERUBAH (dan warehouse asal ada)
+    if (
+      old.ItemCodeId &&
+      detail.ItemCodeId &&
+      old.ItemCodeId !== detail.ItemCodeId &&
+      old.WarehouseId
+    ) {
+      // Kembalikan stok ke warehouse asal untuk ItemCode lama
+      const oldStock = await prisma.warehouseStock.findFirst({
+        where: { WarehouseId: old.WarehouseId, ItemCodeId: old.ItemCodeId }
+      });
+      if (oldStock) {
+        await prisma.warehouseStock.update({
+          where: { Id: oldStock.Id },
+          data: { QtyOnHand: { increment: old.Quantity } }
+        });
+        await prisma.stockHistory.create({
+          data: {
+            WarehouseStockId: oldStock.Id,
+            ItemCodeId: old.ItemCodeId,
+            QtyBefore: oldStock.QtyOnHand,
+            QtyAfter: oldStock.QtyOnHand + old.Quantity,
+            Note: `Reversal karena pindah ItemCode pada Approval SalesOrder #${salesOrderId} dari ItemCodeId ${old.ItemCodeId} ke ${detail.ItemCodeId}`,
+            AdminId: adminId,
+          }
+        });
+      }
+      // pengurangan stok itemCode baru dilakukan proses normal setelah patch ini!
+    }
+
+    // Warehouse BERUBAH, ItemCode SAMA
+    else if (
+      old.WarehouseId &&
+      detail.WarehouseId &&
+      old.WarehouseId !== detail.WarehouseId &&
+      old.ItemCodeId === detail.ItemCodeId
+    ) {
+      // Kembalikan stok ke warehouse lama
+      const oldStock = await prisma.warehouseStock.findFirst({
+        where: { WarehouseId: old.WarehouseId, ItemCodeId: detail.ItemCodeId }
+      });
+      if (oldStock) {
+        await prisma.warehouseStock.update({
+          where: { Id: oldStock.Id },
+          data: { QtyOnHand: { increment: detail.Quantity } }
+        });
+        await prisma.stockHistory.create({
+          data: {
+            WarehouseStockId: oldStock.Id,
+            ItemCodeId: detail.ItemCodeId,
+            QtyBefore: oldStock.QtyOnHand,
+            QtyAfter: oldStock.QtyOnHand + detail.Quantity,
+            Note: `Reversal karena pindah warehouse pada Approval SalesOrder #${salesOrderId} dari warehouseId ${old.WarehouseId} ke ${detail.WarehouseId}`,
+            AdminId: adminId,
+          }
+        });
+      }
+      // pengurangan stok warehouse baru dilakukan proses normal setelah patch ini!
+    }
+
+    // Kasus lain: skip
+  }
+}
+
 export const approveSalesOrder = async (req: Request, res: Response): Promise<void> => {
   try {
     const {
@@ -111,6 +188,23 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
     if (!parsedSalesId || isNaN(parsedSalesId)) {
       res.status(400).json({ message: "SalesId must be a valid number." });
       return;
+    }
+
+    // === VALIDASI HARGA DULU SEBELUM PROSES ===
+    if (SalesOrderDetails && Array.isArray(SalesOrderDetails)) {
+      const hasNoPrice = SalesOrderDetails.some(
+        (d: any) => !d.Price || d.Price === 0
+      );
+      if (hasNoPrice) {
+        res.status(400).json({
+          message: "Approval gagal. Ada item tanpa harga pada Sales Order ini. Lengkapi harga semua item sebelum approve.",
+          details: SalesOrderDetails.filter((d: any) => !d.Price || d.Price === 0).map((d: any) => ({
+            ItemCodeId: d.ItemCodeId,
+            Quantity: d.Quantity
+          }))
+        });
+        return;
+      }
     }
 
     const updateData: any = {};
@@ -240,11 +334,12 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
       // ========================
       // FOR LOOP utama SalesOrderDetails:
       for (const detail of SalesOrderDetails) {
-        const taxIdToUse = ForceApplyTax ? defaultTaxId : null;
-        const taxRateToUse = ForceApplyTax ? defaultTaxRate : 0;
+        const isTax = ForceApplyTax === true;
+        const taxIdToUse = isTax ? defaultTaxId : null;
+        const taxRateToUse = isTax ? defaultTaxRate : 0;
         const finalPrice = detail.Price * detail.Quantity * (1 + taxRateToUse / 100);
 
-        if (detail.Id && detail.Quantity === 0 && currentStatus === SalesOrderStatus.APPROVED_EMAIL_SENT) {
+        if (detail.Id && detail.Quantity > 0) {
           await prisma.salesOrderDetail.update({
             where: { Id: detail.Id },
             data: {
@@ -252,8 +347,12 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
               Price: detail.Price,
               FinalPrice: finalPrice,
               TaxId: taxIdToUse,
+              WarehouseId: detail.WarehouseId ?? null,
+              PriceCategoryId: detail.PriceCategoryId ?? null,
+              FulfillmentStatus: detail.FulfillmentStatus ?? 'READY',
             },
           });
+          continue; // langsung lanjut ke detail berikutnya (skip blok create/delete)
         } else if (!detail.Id && detail.Quantity > 0 && detail.Price) {
           // Jika WarehouseId dari FE null, cari algoritma gudang
           let warehouseIdToUse = detail.WarehouseId ?? null;
@@ -337,8 +436,17 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
           await prisma.salesOrderDetail.delete({
             where: { Id: detail.Id },
           });
+          continue;
         }
       }
+
+      // --- Step X: VALIDASI HARGA --- //
+      const details = await prisma.salesOrderDetail.findMany({
+        where: { SalesOrderId: parsedSalesOrderId },
+      });
+      const hasNoPrice = details.some(d => !d.Price || d.Price === 0);
+
+
 
       // Regenerate file jika detail ikut diubah
       const excelFileName = await generateExcel(parsedSalesOrderId);
@@ -355,82 +463,17 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
 
     // === Tambahan PATCH untuk mengembalikan stok jika warehouse berubah saat approval ===
     if (SalesOrderDetails && Array.isArray(SalesOrderDetails)) {
-      // Ambil detail lama dari database (sebelum update)
       const oldDetails = await prisma.salesOrderDetail.findMany({
         where: { SalesOrderId: parsedSalesOrderId },
       });
       const oldMap = new Map();
       oldDetails.forEach(d => oldMap.set(d.Id, d));
-
-      for (const detail of SalesOrderDetails) {
-        if (!detail.Quantity) continue;
-        if (detail.FulfillmentStatus !== "READY") continue;
-
-        const old = oldMap.get(detail.Id);
-        if (!old) continue;
-
-        // --- Kasus: ItemCode BERUBAH ---
-        if (
-          old.ItemCodeId &&
-          detail.ItemCodeId &&
-          old.ItemCodeId !== detail.ItemCodeId &&
-          old.WarehouseId
-        ) {
-          // Kembalikan stok ke warehouse asal untuk ItemCode lama
-          const oldStock = await prisma.warehouseStock.findFirst({
-            where: { WarehouseId: old.WarehouseId, ItemCodeId: old.ItemCodeId }
-          });
-          if (oldStock) {
-            await prisma.warehouseStock.update({
-              where: { Id: oldStock.Id },
-              data: { QtyOnHand: { increment: old.Quantity } }
-            });
-            await prisma.stockHistory.create({
-              data: {
-                WarehouseStockId: oldStock.Id,
-                ItemCodeId: old.ItemCodeId,
-                QtyBefore: oldStock.QtyOnHand,
-                QtyAfter: oldStock.QtyOnHand + old.Quantity,
-                Note: `Reversal karena pindah ItemCode pada Approval SalesOrder #${parsedSalesOrderId} dari ItemCodeId ${old.ItemCodeId} ke ${detail.ItemCodeId}`,
-                AdminId: adminId,
-              }
-            });
-          }
-          // **Pengurangan stok untuk ItemCode baru** akan dilakukan pada proses normal setelah patch ini!
-        }
-
-        // --- Kasus: Warehouse BERUBAH, ItemCode SAMA ---
-        else if (
-          old.WarehouseId &&
-          detail.WarehouseId &&
-          old.WarehouseId !== detail.WarehouseId &&
-          old.ItemCodeId === detail.ItemCodeId
-        ) {
-          // Kembalikan stok ke warehouse lama
-          const oldStock = await prisma.warehouseStock.findFirst({
-            where: { WarehouseId: old.WarehouseId, ItemCodeId: detail.ItemCodeId }
-          });
-          if (oldStock) {
-            await prisma.warehouseStock.update({
-              where: { Id: oldStock.Id },
-              data: { QtyOnHand: { increment: detail.Quantity } }
-            });
-            await prisma.stockHistory.create({
-              data: {
-                WarehouseStockId: oldStock.Id,
-                ItemCodeId: detail.ItemCodeId,
-                QtyBefore: oldStock.QtyOnHand,
-                QtyAfter: oldStock.QtyOnHand + detail.Quantity,
-                Note: `Reversal karena pindah warehouse pada Approval SalesOrder #${parsedSalesOrderId} dari warehouseId ${old.WarehouseId} ke ${detail.WarehouseId}`,
-                AdminId: adminId,
-              }
-            });
-          }
-          // **Pengurangan stok untuk warehouse baru** akan dilakukan pada proses normal setelah patch ini!
-        }
-
-        // --- Kasus lain: tidak reversal (skip) ---
+      // ⬇️ reversal patch HANYA SEKALI di sini!
+      if (salesOrder.Status !== SalesOrderStatus.APPROVED_EMAIL_SENT) {
+        await patchReversalWarehouseChange(SalesOrderDetails, oldMap, parsedSalesOrderId, adminId);
       }
+
+      // UPDATE, CREATE, DELETE detail tanpa reversal manual
     }
 
     // Ambil detail sales order lengkap untuk update stok
@@ -664,6 +707,7 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
         } catch (error) {
           status = EmailStatus.FAILED;
           allEmailSent = false;
+          console.log("Email send failed to", recipient.RecipientEmail, error);
           // log error jika mau
         }
 
@@ -699,7 +743,11 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
     console.log("========= END DEBUG ==========");
   } catch (error) {
     console.error("Error approving Sales Order:", error);
-    res.status(500).json({ message: "Internal Server Error." });
+    if (error instanceof Error) {
+      res.status(500).json({ message: error.message, stack: error.stack, detail: error });
+    } else {
+      res.status(500).json({ message: "Unknown error", detail: error });
+    }
   }
 };
 
@@ -813,14 +861,26 @@ export const updateSalesOrderApproval = async (req: Request, res: Response): Pro
       return;
     }
 
-    // --- Penambahan reversal stok --- //
     const oldOrder = await prisma.salesOrder.findUnique({
       where: { Id: SalesOrderId },
     });
-
     if (!oldOrder) {
       res.status(404).json({ message: "Sales Order not found." });
       return;
+    }
+
+    // ------------ FIX DI SINI ------------
+    // Ambil old detail (sebelum proses update apapun)
+    let oldMap = new Map();
+    let oldDetails: any[] = [];
+    if (SalesOrderDetails && Array.isArray(SalesOrderDetails)) {
+      oldDetails = await prisma.salesOrderDetail.findMany({ where: { SalesOrderId } });
+      oldDetails.forEach(d => oldMap.set(d.Id, d));
+
+      // PATCH REVERSAL HANYA JIKA STATUS BERUBAH KE APPROVED_EMAIL_SENT DARI BUKAN
+      if (Status === SalesOrderStatus.APPROVED_EMAIL_SENT && oldOrder.Status !== SalesOrderStatus.APPROVED_EMAIL_SENT) {
+        await patchReversalWarehouseChange(SalesOrderDetails, oldMap, SalesOrderId, adminId);
+      }
     }
 
     // Cek jika butuh reversal: status lama APPROVED_EMAIL_SENT, status baru bukan APPROVED_EMAIL_SENT
@@ -871,43 +931,20 @@ export const updateSalesOrderApproval = async (req: Request, res: Response): Pro
       // --- Reversal stok untuk setiap detail yang akan dihapus (deleteMany)
       const previousStatus = oldOrder.Status; // setelah fetch oldOrder
 
-      if (toDeleteIds.length > 0 && previousStatus === SalesOrderStatus.APPROVED_EMAIL_SENT) {
-        const toBeDeletedDetails = existingDetails.filter(d => toDeleteIds.includes(d.Id));
-        for (const old of toBeDeletedDetails) {
-          if (old.FulfillmentStatus === "READY" && old.WarehouseId) {
-            const oldStock = await prisma.warehouseStock.findFirst({
-              where: { WarehouseId: old.WarehouseId, ItemCodeId: old.ItemCodeId }
-            });
-            if (oldStock) {
-              await prisma.warehouseStock.update({
-                where: { Id: oldStock.Id },
-                data: { QtyOnHand: { increment: old.Quantity } }
-              });
-              await prisma.stockHistory.create({
-                data: {
-                  WarehouseStockId: oldStock.Id,
-                  ItemCodeId: old.ItemCodeId,
-                  QtyBefore: oldStock.QtyOnHand,
-                  QtyAfter: oldStock.QtyOnHand + old.Quantity,
-                  Note: `Reversal stok karena SalesOrderDetail dihapus pada SalesOrder #${SalesOrderId}`,
-                  AdminId: adminId,
-                }
-              });
-            }
-          }
-        }
-      }
+
       await prisma.salesOrderDetail.deleteMany({
         where: { Id: { in: toDeleteIds } },
       });
 
 
       for (const detail of SalesOrderDetails) {
-        const taxIdToUse = ForceApplyTax ? defaultTaxId : null;
-        const taxRateToUse = ForceApplyTax ? defaultTaxRate : 0;
+        const isTax = ForceApplyTax === true;
+        const taxIdToUse = isTax ? defaultTaxId : null;
+        const taxRateToUse = isTax ? defaultTaxRate : 0;
         const finalPrice = detail.Price * detail.Quantity * (1 + taxRateToUse / 100);
 
-        if (detail.Id && detail.Quantity === 0 && previousStatus === SalesOrderStatus.APPROVED_EMAIL_SENT) {
+        // PATCH (update existing)
+        if (detail.Id && detail.Quantity > 0) {
           await prisma.salesOrderDetail.update({
             where: { Id: detail.Id },
             data: {
@@ -915,10 +952,15 @@ export const updateSalesOrderApproval = async (req: Request, res: Response): Pro
               Price: detail.Price,
               FinalPrice: finalPrice,
               TaxId: taxIdToUse,
+              WarehouseId: detail.WarehouseId ?? null,
+              PriceCategoryId: detail.PriceCategoryId ?? null,
+              FulfillmentStatus: detail.FulfillmentStatus ?? 'READY',
             },
           });
-        } else if (!detail.Id && detail.Quantity > 0 && detail.Price) {
-          console.log('CREATE NEW SALESORDERDETAIL:', detail);
+          continue;
+        }
+        // CREATE (insert new)
+        else if (!detail.Id && detail.Quantity > 0 && detail.Price) {
           await prisma.salesOrderDetail.create({
             data: {
               SalesOrderId: SalesOrderId,
@@ -932,32 +974,13 @@ export const updateSalesOrderApproval = async (req: Request, res: Response): Pro
               FulfillmentStatus: detail.FulfillmentStatus ?? 'READY',
             },
           });
-        } else if (detail.Id && detail.Quantity === 0) {
-          const old = existingDetails.find(d => d.Id === detail.Id);
-          if (old && old.FulfillmentStatus === "READY" && old.WarehouseId) {
-            const oldStock = await prisma.warehouseStock.findFirst({
-              where: { WarehouseId: old.WarehouseId, ItemCodeId: old.ItemCodeId }
-            });
-            if (oldStock) {
-              await prisma.warehouseStock.update({
-                where: { Id: oldStock.Id },
-                data: { QtyOnHand: { increment: old.Quantity } }
-              });
-              await prisma.stockHistory.create({
-                data: {
-                  WarehouseStockId: oldStock.Id,
-                  ItemCodeId: old.ItemCodeId,
-                  QtyBefore: oldStock.QtyOnHand,
-                  QtyAfter: oldStock.QtyOnHand + old.Quantity,
-                  Note: `Reversal stok karena SalesOrderDetail dihapus (qty=0) pada SalesOrder #${SalesOrderId}`,
-                  AdminId: adminId,
-                }
-              });
-            }
-          }
+        }
+        // DELETE (hapus jika quantity = 0)
+        else if (detail.Id && detail.Quantity === 0) {
           await prisma.salesOrderDetail.delete({
             where: { Id: detail.Id },
           });
+          continue;
         }
       }
 
@@ -973,98 +996,7 @@ export const updateSalesOrderApproval = async (req: Request, res: Response): Pro
         },
       });
     }
-    if (Status === SalesOrderStatus.APPROVED_EMAIL_SENT && oldOrder.Status !== SalesOrderStatus.APPROVED_EMAIL_SENT) {
-      // Ambil detail lama dan baru
-      const oldDetails = await prisma.salesOrderDetail.findMany({
-        where: { SalesOrderId },
-      });
 
-      // Buat map by ItemCodeId (atau pakai Id jika unique)
-      const oldMap = new Map();
-      oldDetails.forEach(d => oldMap.set(d.Id, d));
-
-      for (const detail of SalesOrderDetails) {
-        if (!detail.Quantity || !detail.ItemCodeId) continue;
-
-        // Hanya fulfillment READY yang boleh mengubah stok
-        if (detail.FulfillmentStatus !== "READY") continue;
-
-        const old = oldMap.get(detail.Id);
-        const oldWarehouseId = old?.WarehouseId || null;
-        const newWarehouseId = detail.WarehouseId || null;
-
-        // --- Jika warehouse berbeda ---
-        if (oldWarehouseId && newWarehouseId && oldWarehouseId !== newWarehouseId) {
-          // 1. Kembalikan stok ke warehouse lama
-          const oldStock = await prisma.warehouseStock.findFirst({
-            where: { WarehouseId: oldWarehouseId, ItemCodeId: detail.ItemCodeId }
-          });
-          if (oldStock) {
-            await prisma.warehouseStock.update({
-              where: { Id: oldStock.Id },
-              data: { QtyOnHand: { increment: detail.Quantity } }
-            });
-            await prisma.stockHistory.create({
-              data: {
-                WarehouseStockId: oldStock.Id,
-                ItemCodeId: detail.ItemCodeId,
-                QtyBefore: oldStock.QtyOnHand,
-                QtyAfter: oldStock.QtyOnHand + detail.Quantity,
-                Note: `Reversal update sales order karena pindah warehouse pada SalesOrder #${SalesOrderId} dari warehouseId ${oldWarehouseId}`,
-                AdminId: adminId,
-              }
-            });
-          }
-          // 2. Kurangi stok di warehouse baru
-          const newStock = await prisma.warehouseStock.findFirst({
-            where: { WarehouseId: newWarehouseId, ItemCodeId: detail.ItemCodeId }
-          });
-          if (!newStock || newStock.QtyOnHand < detail.Quantity) {
-            throw new Error(`Stock tidak cukup di warehouseId ${newWarehouseId} untuk ItemCodeId ${detail.ItemCodeId}`);
-          }
-          await prisma.warehouseStock.update({
-            where: { Id: newStock.Id },
-            data: { QtyOnHand: { decrement: detail.Quantity } }
-          });
-          await prisma.stockHistory.create({
-            data: {
-              WarehouseStockId: newStock.Id,
-              ItemCodeId: detail.ItemCodeId,
-              QtyBefore: newStock.QtyOnHand,
-              QtyAfter: newStock.QtyOnHand - detail.Quantity,
-              Note: `Pengambilan stok pada Approval SalesOrder #${SalesOrderId} di warehouseId ${newWarehouseId}`,
-              AdminId: adminId,
-            }
-          });
-        }
-        // --- Jika warehouse sama atau baru pertama approve ---
-        else if (newWarehouseId) {
-          const stock = await prisma.warehouseStock.findFirst({
-            where: { WarehouseId: newWarehouseId, ItemCodeId: detail.ItemCodeId }
-          });
-          if (!stock || stock.QtyOnHand < detail.Quantity) {
-            throw new Error(
-              `Stock tidak cukup di warehouseId ${newWarehouseId} untuk ItemCodeId ${detail.ItemCodeId}`
-            );
-          }
-          await prisma.warehouseStock.update({
-            where: { Id: stock.Id },
-            data: { QtyOnHand: { decrement: detail.Quantity } }
-          });
-          await prisma.stockHistory.create({
-            data: {
-              WarehouseStockId: stock.Id,
-              ItemCodeId: detail.ItemCodeId,
-              QtyBefore: stock.QtyOnHand,
-              QtyAfter: stock.QtyOnHand - detail.Quantity,
-              Note: `Pengambilan stok pada Approval SalesOrder #${SalesOrderId} (warehouseId ${newWarehouseId})`,
-              AdminId: adminId,
-            }
-          });
-        }
-        // Jika warehouseId null, biarkan saja (atau tambahkan logic fallback dealerWarehouse jika mau)
-      }
-    }
     res.status(200).json({
       message: "Sales Order updated successfully.",
       data: updatedOrder,

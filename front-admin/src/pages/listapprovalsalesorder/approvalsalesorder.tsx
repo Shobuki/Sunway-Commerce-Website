@@ -95,6 +95,7 @@ const ApprovalSalesOrder: React.FC = () => {
   const [emailRecipients, setEmailRecipients] = useState<EmailRecipient[]>([]);
 
   const [dateRange, setDateRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
+  const [sortByNewest, setSortByNewest] = useState(true);
 
   const [dropdownOpen, setDropdownOpen] = useState<boolean[]>([]);
   const [itemCodeOptions, setItemCodeOptions] = useState<
@@ -171,7 +172,7 @@ const ApprovalSalesOrder: React.FC = () => {
         return {
           ...detail,
           FinalPrice: forceApplyTax
-            ? base * (1 + activeTax.Percentage / 100)
+            ? Math.round(base * (1 + activeTax.Percentage / 100))
             : base,
         };
       })
@@ -187,6 +188,29 @@ const ApprovalSalesOrder: React.FC = () => {
       );
       setForceApplyTax(hasAnyTax);
     }
+    if (showModal && updateDetails.length > 0) {
+      console.log('===== [APPROVAL PAGE] =====');
+      updateDetails.forEach((detail, idx) => {
+        const qty = detail.Quantity;
+        const price = detail.Price;
+        const tax = forceApplyTax && activeTax ? activeTax.Percentage : (detail.TaxPercentage ?? 0);
+        const subtotal = qty * price;
+        const finalWithTax = forceApplyTax && activeTax
+          ? Math.round(qty * price * (1 + activeTax.Percentage / 100))
+          : qty * price;
+        console.log(`[${idx}]`, {
+          ItemCodeId: detail.ItemCodeId,
+          Qty: qty,
+          Price: price,
+          Tax: tax,
+          Subtotal: subtotal,
+          FinalWithTax: finalWithTax,
+        });
+      });
+      const sumQty = updateDetails.reduce((sum, d) => sum + d.Quantity, 0);
+      const sumFinal = updateDetails.reduce((sum, d) => sum + d.FinalPrice, 0);
+      console.log('TOTAL QTY:', sumQty, 'TOTAL FINAL PRICE:', sumFinal);
+    }
     // eslint-disable-next-line
   }, [showModal]);
 
@@ -198,6 +222,26 @@ const ApprovalSalesOrder: React.FC = () => {
     });
     // eslint-disable-next-line
   }, [updateDetails]);
+
+  useEffect(() => {
+    if (!showModal || !updateDetails.length) {
+      setPricingSummary(null);
+      return;
+    }
+    // PATCH: Selalu kirim TaxPercentage = 0 jika forceApplyTax === false
+    const items = updateDetails.map((item) => ({
+      ItemCodeId: item.ItemCodeId,
+      Quantity: item.Quantity,
+      Price: item.Price,
+      TaxPercentage: forceApplyTax
+        ? undefined // Tax diatur oleh backend pakai pajak aktif
+        : 0 // WAJIB 0, agar backend tau pajak tidak aktif
+    }));
+
+    fetchPricingSummary(items, forceApplyTax)
+      .then((result) => setPricingSummary(result))
+      .catch(() => setPricingSummary(null));
+  }, [updateDetails, forceApplyTax, activeTax, showModal]);
 
   const fetchSessionAndSalesOrders = async () => {
     const token = localStorage.getItem("token");
@@ -308,6 +352,36 @@ const ApprovalSalesOrder: React.FC = () => {
     }
   };
 
+  const [pricingSummary, setPricingSummary] = useState<null | {
+    details: any[];
+    subtotal: number;
+    totalTax: number;
+    totalWithTax: number;
+    activeTax?: { Id: number; Name?: string; Percentage: number } | null;
+  }>(null);
+
+  const fetchPricingSummary = async (
+    items: {
+      ItemCodeId: number;
+      Quantity: number;
+      Price: number;
+      TaxPercentage?: number | null;
+    }[],
+    forceApplyActiveTax: boolean = false
+  ) => {
+    const token = localStorage.getItem("token");
+    const res = await axios.post(
+      "/api/global/pricing/calculate",
+      {
+        details: items,
+        forceApplyActiveTax,
+      },
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
+    );
+    return res.data;
+  };
 
   const fetchWarehouseForItemCode = async (itemCodeId: number, index: number) => {
     if (!itemCodeId) {
@@ -383,7 +457,7 @@ const ApprovalSalesOrder: React.FC = () => {
       const price = field === "Price" ? value : updated[index].Price;
 
       updated[index].FinalPrice = forceApplyTax && activeTax
-        ? qty * price * (1 + activeTax.Percentage / 100)
+        ? Math.round(qty * price * (1 + activeTax.Percentage / 100))
         : qty * price;
 
       return updated;
@@ -736,7 +810,15 @@ const ApprovalSalesOrder: React.FC = () => {
   console.log('All salesOrders:', salesOrders);
   console.log('Filtered orders:', filteredOrders);
 
-  const sortedOrders = [...filteredOrders].sort((a, b) => {
+  const sortedOrders = [...filteredOrders]
+  .sort((a, b) => {
+    // Urut tanggal dulu
+    const dateA = new Date(a.CreatedAt).getTime();
+    const dateB = new Date(b.CreatedAt).getTime();
+    if (dateA !== dateB) {
+      return sortByNewest ? dateB - dateA : dateA - dateB;
+    }
+    // Kalau tanggal sama, urut dealer (sesuai preferensi)
     const nameA = a.Dealer.CompanyName.toLowerCase();
     const nameB = b.Dealer.CompanyName.toLowerCase();
     return sortDealerAsc
@@ -818,12 +900,20 @@ const ApprovalSalesOrder: React.FC = () => {
           className="border px-4 py-2 rounded"
         />
       </div>
-      <button
-        className="bg-purple-500 px-4 py-2 rounded text-white mb-4"
-        onClick={() => setSortDealerAsc(prev => !prev)}
-      >
-        Sort Dealer Name {sortDealerAsc ? "↑" : "↓"}
-      </button>
+      <div className="flex gap-2 mb-4">
+        <button
+          className="bg-purple-500 px-4 py-2 rounded text-white"
+          onClick={() => setSortDealerAsc(prev => !prev)}
+        >
+          Sort Dealer Name {sortDealerAsc ? "↑" : "↓"}
+        </button>
+        <button
+          className="bg-blue-500 px-4 py-2 rounded text-white"
+          onClick={() => setSortByNewest(prev => !prev)}
+        >
+          {sortByNewest ? "Urut: Terbaru" : "Urut: Terlama"}
+        </button>
+      </div>
 
 
       <table className="w-full border-collapse border border-gray-300 text-left">
@@ -1004,6 +1094,7 @@ const ApprovalSalesOrder: React.FC = () => {
                       <col style={{ width: '35%' }} /> {/* Item Code */}
                       <col style={{ width: '15%' }} /> {/* Quantity */}
                       <col style={{ width: '20%' }} /> {/* Price */}
+                      <col style={{ width: '20%' }} /> {/* Warehouse*/}
                       <col style={{ width: '20%' }} /> {/* Final Price */}
                       <col style={{ width: '10%' }} /> {/* Action */}
                     </colgroup>
@@ -1012,6 +1103,7 @@ const ApprovalSalesOrder: React.FC = () => {
                         <th className="border px-3 py-2 text-left">Item Code</th>
                         <th className="border px-3 py-2 text-left">Quantity</th>
                         <th className="border px-3 py-2 text-left">Price</th>
+                        <th className="border px-3 py-2 text-left">Warehouse</th>
                         <th className="border px-3 py-2 text-left">Final Price</th>
                         <th className="border px-3 py-2 text-left">Action</th>
                       </tr>
@@ -1066,7 +1158,7 @@ const ApprovalSalesOrder: React.FC = () => {
                                           const qty = updated[index].Quantity;
                                           const price = updated[index].Price; // atau item.DefaultPrice
                                           updated[index].FinalPrice = forceApplyTax && activeTax
-                                            ? qty * price * (1 + activeTax.Percentage / 100)
+                                            ? Math.round(qty * price * (1 + activeTax.Percentage / 100))
                                             : qty * price;
 
                                           setUpdateDetails(updated);
@@ -1131,7 +1223,11 @@ const ApprovalSalesOrder: React.FC = () => {
                             </select>
                           </td>
                           <td className="border px-2 py-1 bg-gray-50 text-gray-800 align-top">
-                            Rp {detail.FinalPrice.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            Rp {
+                              pricingSummary?.details?.[index]?.FinalPrice
+                                ? pricingSummary.details[index].FinalPrice.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : (detail.FinalPrice || 0).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            }
                           </td>
                           <td className="border text-center align-middle">
                             <button
@@ -1150,11 +1246,31 @@ const ApprovalSalesOrder: React.FC = () => {
                     {/* Total Keseluruhan */}
                     <tfoot>
                       <tr>
-                        <td colSpan={3} className="text-right font-bold px-3 py-2 border">Total Keseluruhan:</td>
-                        <td className="border px-3 py-2 bg-gray-100 font-bold text-gray-800">
-                          Rp {totalOverallPrice.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <td colSpan={4} className="text-right font-bold px-3 py-2 border">
+                          Subtotal:
                         </td>
-                        <td className="border"></td> {/* Kolom kosong untuk Action */}
+                        <td className="border px-3 py-2 text-gray-800">
+                          Rp {pricingSummary ? pricingSummary.subtotal.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 0}
+                        </td>
+                        <td className="border"></td>
+                      </tr>
+                      <tr>
+                        <td colSpan={4} className="text-right font-bold px-3 py-2 border">
+                          Pajak ({pricingSummary?.activeTax?.Percentage ?? 0}%):
+                        </td>
+                        <td className="border px-3 py-2 text-gray-800">
+                          Rp {pricingSummary ? pricingSummary.totalTax.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 0}
+                        </td>
+                        <td className="border"></td>
+                      </tr>
+                      <tr>
+                        <td colSpan={4} className="text-right font-bold px-3 py-2 border bg-gray-100">
+                          Total Keseluruhan:
+                        </td>
+                        <td className="border px-3 py-2 bg-gray-100 font-bold text-green-700">
+                          Rp {pricingSummary ? pricingSummary.totalWithTax.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 0}
+                        </td>
+                        <td className="border bg-gray-100"></td>
                       </tr>
                     </tfoot>
                   </table>

@@ -8,6 +8,20 @@ model Product {
   PartNumber      PartNumber[]
   ProductImage    ProductImage[]
   ProductCategory ProductCategory[] @relation("ProductToProductCategory")
+  ProductSpecificationFile ProductSpecificationFile[]
+  
+  @@schema("public")
+}
+
+model ProductSpecificationFile {
+  Id        Int      @id @default(autoincrement())
+  ProductId Int
+  FileName  String   
+  FilePath  String   
+  MimeType  String   
+  UploadedAt DateTime @default(now())
+  DeletedAt DateTime?
+  Product   Product  @relation(fields: [ProductId], references: [Id])
 
   @@schema("public")
 }

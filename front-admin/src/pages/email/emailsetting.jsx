@@ -21,6 +21,13 @@ const TEMPLATE_VARIABLES = {
         { label: "{{JDE}}", desc: "nomor jde sales order" },
         // dst... (tambahkan sesuai backend parser)
     ],
+    ADMIN_NOTIFICATION_SALESORDER: [
+        { label: "{{dealer}}", desc: "Nama dealer" },
+        { label: "{{sales}}", desc: "Nama sales" },
+        { label: "{{sales_order_number}}", desc: "Nomor sales order" },
+        { label: "{{created_date}}", desc: "Tanggal order" },
+        { label: "{{path}}", desc: "Link detail approval" }
+    ],
     FORGOT_PASSWORD_USER: [
         { label: "{{user}}", desc: "Nama user" },
         { label: "{{link}}", desc: "Link reset password" }
@@ -277,6 +284,7 @@ const EmailSettings = () => {
                                 <option value="SALES_ORDER">SALES_ORDER</option>
                                 <option value="FORGOT_PASSWORD_USER">FORGOT_PASSWORD_USER</option>
                                 <option value="FORGOT_PASSWORD_ADMIN">FORGOT_PASSWORD_ADMIN</option>
+                                <option value="ADMIN_NOTIFICATION_SALESORDER">ADMIN_NOTIFICATION_SALESORDER</option>
                             </select>
                         </div>
                         <div className="flex justify-end gap-3 mt-4">

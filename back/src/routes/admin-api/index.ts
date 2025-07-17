@@ -6,6 +6,7 @@ import profilecontroller from '../../routes/admin-api/admin/ProfileController';
 //route superadmin
 import crudadmin from './admin/manageadmin/CrudAdmin';
 import crudadminroles from './admin/manageadmin/CrudAdminRoles';
+import adminnotification from './admin/notification'
 
 //route menuseed
 import Seed from './Seed';
@@ -49,7 +50,7 @@ adminApiRouter.use('/admin', Seed);
 //rute admin
 adminApiRouter.use('/admin',crudadmin)
 adminApiRouter.use('/admin',crudadminroles)
-
+adminApiRouter.use('/admin',adminnotification)
 
 //rute dealer
 adminApiRouter.use('/admin',cruddealer)

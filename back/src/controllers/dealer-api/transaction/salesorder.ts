@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
-
+import { calculateOrderSummary } from "../../../controllers/global/Pricing";
 const prisma = new PrismaClient();
 
 // Direktori penyimpanan file
@@ -13,6 +13,11 @@ const PDF_DIRECTORY = path.join(process.cwd(), "public", "dealer", "files", "sal
 const LOGO_PATH = path.join(process.cwd(), "public", "dealer", "files", "salesorder", "formatexcel", "logosunway.png");
 const LOGO_Sunflex = path.join(process.cwd(), "public", "dealer", "files", "salesorder", "formatexcel", "logoSunflex.png");
 const LOGO_SunflexStore = path.join(process.cwd(), "public", "dealer", "files", "salesorder", "formatexcel", "logoSunflexStore.png");
+
+
+function renderTemplate(str: string, obj: { [x: string]: any; }) {
+  return str.replace(/\{\{(.*?)\}\}/g, (_, key) => obj[key.trim()] ?? "");
+}
 
 // Pastikan direktori ada
 if (!fs.existsSync(EXCEL_DIRECTORY)) fs.mkdirSync(EXCEL_DIRECTORY, { recursive: true });
@@ -106,6 +111,33 @@ export const convertCartToSalesOrder = async (req: Request, res: Response): Prom
       res.status(400).json({ message: "No Sales assigned to this Dealer." });
       return;
     }
+    const partNumberCartMap = new Map<number, { quantity: number, displayItemCodeId: number }>();
+    for (const item of cart.CartItems) {
+      const partNumberId = item.ItemCode.PartNumberId;
+      if (partNumberId == null) continue;
+      if (!partNumberCartMap.has(partNumberId)) {
+        partNumberCartMap.set(partNumberId, { quantity: 0, displayItemCodeId: item.ItemCodeId });
+      }
+      partNumberCartMap.get(partNumberId)!.quantity += item.Quantity;
+    }
+
+
+    for (const [partNumberId, { quantity }] of partNumberCartMap.entries()) {
+      const allItemCodes = await prisma.itemCode.findMany({
+        where: { PartNumberId: partNumberId, AllowItemCodeSelection: false, DeletedAt: null },
+        include: { WarehouseStocks: true }
+      });
+      const totalAvailableStock = allItemCodes.reduce(
+        (sum, ic) => sum + ic.WarehouseStocks.reduce((s, ws) => s + (ws.QtyOnHand > 0 ? ws.QtyOnHand : 0), 0),
+        0
+      );
+      if (quantity > totalAvailableStock) {
+        res.status(400).json({
+          message: `Permintaan melebihi stok! Partnumber ${partNumberId} membutuhkan ${quantity}, stok tersedia ${totalAvailableStock}.`
+        });
+        return;
+      }
+    }
 
     const newSalesOrder = await prisma.salesOrder.create({
       data: {
@@ -128,106 +160,115 @@ export const convertCartToSalesOrder = async (req: Request, res: Response): Prom
 
     const uniqueItemsMap = new Map<number, typeof cart.CartItems[0]>();
 
-    for (const item of cart.CartItems) {
-      if (!uniqueItemsMap.has(item.ItemCodeId)) {
-        uniqueItemsMap.set(item.ItemCodeId, item);
-      } else {
-        const existing = uniqueItemsMap.get(item.ItemCodeId)!;
-        existing.Quantity += item.Quantity;
-      }
-    }
 
 
-    for (const cartItem of uniqueItemsMap.values()) {
-      const itemCode = cartItem.ItemCode;
-      const quantityNeeded = cartItem.Quantity;
 
-      if (itemCode.MinOrderQuantity && quantityNeeded < itemCode.MinOrderQuantity) {
-        res.status(400).json({ message: `Item ${itemCode.Name} minimal order ${itemCode.MinOrderQuantity}.` });
+
+    // 2. Alokasikan stok per partnumber, urut warehouse dealer
+    for (const [partNumberId, { quantity, displayItemCodeId }] of partNumberCartMap.entries()) {
+      const anyItemCode = await prisma.itemCode.findFirst({
+        where: { PartNumberId: partNumberId, AllowItemCodeSelection: false, DeletedAt: null }
+      });
+      if (anyItemCode && anyItemCode.MinOrderQuantity && quantity < anyItemCode.MinOrderQuantity) {
+        res.status(400).json({ message: `Item ${anyItemCode.Name} minimal order ${anyItemCode.MinOrderQuantity}.` });
         return;
       }
 
-      // 1. Ambil prioritas warehouse milik dealer
+      const allItemCodes = await prisma.itemCode.findMany({
+        where: { PartNumberId: partNumberId, AllowItemCodeSelection: false, DeletedAt: null },
+        include: { WarehouseStocks: true }
+      });
+
+      // 1. CEK STOK TOTAL AKUMULASI
+      const totalAvailableStock = allItemCodes.reduce((sum, ic) =>
+        sum + ic.WarehouseStocks.reduce((s, ws) => s + (ws.QtyOnHand > 0 ? ws.QtyOnHand : 0), 0)
+        , 0);
+      console.log(`[CHECK STOCK][${partNumberId}] Request: ${quantity} | Available: ${totalAvailableStock}`);
+
+      if (quantity > totalAvailableStock) {
+        res.status(400).json({
+          message: `Permintaan melebihi stok! Partnumber ${partNumberId} membutuhkan ${quantity}, stok tersedia ${totalAvailableStock}.`
+        });
+        return;
+      }
+
       const dealerWarehouses = await prisma.dealerWarehouse.findMany({
         where: { DealerId: dealer.Id },
         orderBy: { Priority: 'asc' },
-        select: { WarehouseId: true, Priority: true },
+        select: { WarehouseId: true }
       });
+      const priorityWarehouseIds = dealerWarehouses.map(dw => dw.WarehouseId);
 
-      // 2. Buat map prioritas
-      const priorityMap = new Map(
-        dealerWarehouses.map(dw => [dw.WarehouseId, dw.Priority ?? 999])
-      );
+      let qtyRemaining = quantity;
+      let lastAllocatedDetail: any = null;
 
-      // 3. Filter stock dengan Qty > 0 dan memiliki prioritas
-      const prioritizedStocks = itemCode.WarehouseStocks
-        .filter(s => s.QtyOnHand > 0 && priorityMap.has(s.WarehouseId))
-        .map(s => ({
-          ...s,
-          Priority: priorityMap.get(s.WarehouseId) ?? 999,
-        }))
-        .sort((a, b) => a.Priority - b.Priority);
+      for (const warehouseId of priorityWarehouseIds) {
+        if (qtyRemaining <= 0) break;
+        const itemCodesThisWarehouse = allItemCodes
+          .map(ic => {
+            const ws = ic.WarehouseStocks.find(s => s.WarehouseId === warehouseId && s.QtyOnHand > 0);
+            return ws ? { itemCode: ic, stock: ws.QtyOnHand } : undefined;
+          })
+          .filter((v): v is { itemCode: typeof allItemCodes[0], stock: number } => v !== undefined);
 
-      // 4. Pilih warehouse dengan stok mencukupi berdasarkan prioritas
-      let selectedStock = prioritizedStocks.find(s => s.QtyOnHand >= quantityNeeded);
+        for (const { itemCode, stock } of itemCodesThisWarehouse) {
+          if (qtyRemaining <= 0) break;
+          const ambil = Math.min(qtyRemaining, stock);
 
-      let fulfillmentStatus: "READY" | "IN_PO" = "READY";
+          // Harga, pajak, dsb
+          const itemPrices = await prisma.price.findMany({
+            where: { ItemCodeId: itemCode.Id, DeletedAt: null },
+            include: { WholesalePrices: { where: { DeletedAt: null } } }
+          });
+          const resolved = resolvePrice(itemPrices, dealer.Id, dealer.PriceCategoryId, ambil);
+          let priceFinal = resolved.price && resolved.price !== 0 ? resolved.price : null;
+          let tax = null, taxRate = 0, finalPrice = null, taxId = null;
 
-      if (!selectedStock) {
-        const totalAvailable = itemCode.WarehouseStocks.reduce((sum, s) => sum + s.QtyOnHand, 0);
-        const qtyPO = itemCode.QtyPO ?? 0;
+          if (priceFinal !== null) {
+            tax = await prisma.tax.findFirst({
+              where: { IsActive: true },
+              orderBy: { CreatedAt: "desc" }
+            });
+            taxRate = tax?.Percentage ?? 0;
+            finalPrice = Math.round(priceFinal * (1 + taxRate / 100));
+            taxId = tax?.Id ?? null;
+          } else {
+            priceFinal = 0;
+            finalPrice = 0;
+            taxId = null;
+            taxRate = 0;
+            // log (optional)
+            console.log(`[NO PRICE][${itemCode.Name}] Dimasukkan ke salesOrderDetail tanpa harga.`);
+          }
 
-        if ((totalAvailable + qtyPO) >= quantityNeeded) {
-          fulfillmentStatus = "IN_PO";
-          selectedStock = prioritizedStocks[0] || null; // ✅ ganti dari sortedStocks[0]
+          salesOrderDetails.push({
+            SalesOrderId: newSalesOrder.Id,
+            ItemCodeId: itemCode.Id,
+            WarehouseId: warehouseId,
+            Quantity: ambil,
+            Price: priceFinal,
+            FinalPrice: finalPrice,
+            PriceCategoryId: dealer.PriceCategoryId,
+            FulfillmentStatus: FulfillmentStatus.READY,
+            TaxId: taxId,
+          });
+          lastAllocatedDetail = salesOrderDetails[salesOrderDetails.length - 1];
+          console.log(`[PUSH][${partNumberId}] ItemCode=${itemCode.Id} Warehouse=${warehouseId} Ambil=${ambil} | SisaGlobal=${qtyRemaining - ambil}`);
+          qtyRemaining -= ambil;
         }
-        else {
-          res.status(400).json({ message: `Insufficient stock and PO for ${itemCode.Name}.` });
+      }
+
+      if (qtyRemaining > 0) {
+        if (lastAllocatedDetail) {
+          console.warn(`[FALLBACK ALLOCATE][${partNumberId}] Tambah qty ke detail terakhir: +${qtyRemaining} | LastDetail:`, lastAllocatedDetail);
+          lastAllocatedDetail.Quantity += qtyRemaining;
+          qtyRemaining = 0;
+        } else {
+          console.error(`[FAILED ALLOCATE][${partNumberId}] Tidak ada detail, stok tidak cukup`);
+          res.status(400).json({ message: `Stok tidak cukup untuk partnumber ${partNumberId} (kurang ${qtyRemaining}).` });
           return;
         }
       }
-
-      const itemPrices = await prisma.price.findMany({
-        where: {
-          ItemCodeId: cartItem.ItemCodeId,
-          DeletedAt: null,
-        },
-        include: {
-          WholesalePrices: { where: { DeletedAt: null } },
-        },
-      });
-
-      const resolved = resolvePrice(
-        itemPrices,
-        dealer.Id,
-        dealer.PriceCategoryId,
-        quantityNeeded
-      );
-
-      if (!resolved.price || resolved.price === 0) {
-        res.status(400).json({ message: `No valid price for item ${itemCode.Name} at this quantity.` });
-        return;
-      }
-
-      const tax = await prisma.tax.findFirst({
-        where: { IsActive: true },
-        orderBy: { CreatedAt: "desc" },
-      });
-      const taxRate = tax?.Percentage ?? 0;
-      const finalPrice = resolved.price * (1 + taxRate / 100);
-
-      salesOrderDetails.push({
-        SalesOrderId: newSalesOrder.Id,
-        ItemCodeId: cartItem.ItemCodeId,
-        WarehouseId: selectedStock?.WarehouseId ?? null,
-        Quantity: quantityNeeded,
-        Price: resolved.price,
-        FinalPrice: finalPrice,
-        PriceCategoryId: dealer.PriceCategoryId,
-        FulfillmentStatus: fulfillmentStatus,
-        TaxId: tax?.Id ?? null,
-      });
-
     }
 
 
@@ -266,8 +307,103 @@ export const convertCartToSalesOrder = async (req: Request, res: Response): Prom
         }))
       }
     });
+    // 1. Cari semua admin penerima (misal: admin dengan role tertentu, atau semua)
+    const adminList = await prisma.admin.findMany({
+      where: { DeletedAt: null }
+    });
 
+    const emailTemplate = await prisma.emailTemplate.findFirst({
+      where: {
+        TemplateType: "ADMIN_NOTIFICATION_SALESORDER",
+        DeletedAt: null
+      },
+      orderBy: { CreatedAt: "desc" }
+    });
 
+    // Konfig Email Aktif (assume ambil satu yg aktif)
+    const emailConfig = await prisma.emailConfig.findFirst({
+      where: { IsActive: true, DeletedAt: null }
+    });
+
+    const pathUrl = "http://sunflexstoreindonesia.com/listapprovalsalesorder/approvalsalesorder";
+    const createdDate = (newSalesOrder.CreatedAt ?? new Date()).toLocaleDateString('id-ID');
+
+    // 2. Loop semua admin dan buat notifikasi
+    for (const admin of adminList) {
+      // 1. Lonceng notifikasi
+      await prisma.adminNotification.create({
+        data: {
+          AdminId: admin.Id,
+          Type: "SALES_ORDER_NEW",
+          Title: "Sales Order Baru",
+          Body: `Sales Order #${newSalesOrder.Id} berhasil dibuat dari keranjang.`,
+          Path: `/listapprovalsalesorder/approvalsalesorder`,
+          SalesOrderId: newSalesOrder.Id,
+          IsRead: false
+        }
+      });
+
+      // 2. Kirim Email berdasarkan Template
+      if (admin.Email && emailTemplate && emailConfig) {
+        // Bind variabel sesuai template kamu
+        const binding = {
+          dealer: dealer.CompanyName,
+          sales: sales.Admin?.Name || "-",
+          sales_order_number: newSalesOrder.Id.toString(),
+          created_date: createdDate,
+          path: pathUrl
+        };
+
+        const subject = renderTemplate(emailTemplate.Subject || "Sales Order Baru", binding);
+        const body = renderTemplate(emailTemplate.Body || "", binding);
+
+        // Simpan email ke DB (untuk log/queue)
+        await prisma.emailSalesOrder.create({
+          data: {
+            SalesOrderId: newSalesOrder.Id,
+            SenderEmail: emailConfig.Email,
+            RecipientEmail: admin.Email,
+            Subject: subject,
+            Body: body,
+            Status: "PENDING"
+          }
+        });
+
+        // Kirim email langsung (sync) pakai nodemailer
+        try {
+          const nodemailer = require('nodemailer');
+          const transporter = nodemailer.createTransport({
+            host: emailConfig.Host,
+            port: emailConfig.Port,
+            secure: emailConfig.Secure,
+            auth: {
+              user: emailConfig.Email,
+              pass: emailConfig.Password
+            }
+          });
+
+          await transporter.sendMail({
+            from: `"No Reply" <${emailConfig.Email}>`,
+            to: admin.Email,
+            subject: subject,
+            html: body,
+          });
+
+          // Update status email jika sukses
+          await prisma.emailSalesOrder.updateMany({
+            where: { SalesOrderId: newSalesOrder.Id, RecipientEmail: admin.Email },
+            data: { Status: "SENT" }
+          });
+        } catch (err) {
+          // Jika gagal, update status
+          await prisma.emailSalesOrder.updateMany({
+            where: { SalesOrderId: newSalesOrder.Id, RecipientEmail: admin.Email },
+            data: { Status: "FAILED" }
+          });
+          console.error("Failed send email to admin:", admin.Email, err);
+        }
+      }
+    }
   } catch (error) {
     console.error("Error converting cart to sales order:", error);
     res.status(500).json({ message: "Internal Server Error." });
@@ -279,7 +415,12 @@ export const generateExcel = async (salesOrderId: number): Promise<string> => {
   const salesOrder = await prisma.salesOrder.findUnique({
     where: { Id: salesOrderId },
     include: {
-      SalesOrderDetails: { include: { ItemCode: { include: { PartNumber: true } } } },
+      SalesOrderDetails: {
+        include: {
+          ItemCode: { include: { PartNumber: true } },
+          Tax: true
+        }
+      },
       Dealer: true,
       Sales: { include: { Admin: true } },
       User: true,
@@ -287,6 +428,18 @@ export const generateExcel = async (salesOrderId: number): Promise<string> => {
   });
 
   if (!salesOrder || !salesOrder.Dealer) throw new Error("Sales Order or Dealer not found.");
+
+  // 1. Mapping data ke PricingItemInput[]
+  const pricingInput = salesOrder.SalesOrderDetails.map(detail => ({
+    ItemCodeId: detail.ItemCodeId,
+    Quantity: detail.Quantity,
+    Price: detail.Price ?? 0,
+    TaxPercentage: detail.Tax?.Percentage ?? 0,   // pastikan sesuai property yang diharapkan API
+  }));
+
+  // 2. Panggil function calculateOrderSummary
+  const pricingResult = await calculateOrderSummary(pricingInput, false); // false: tax sesuai di detail DB
+
 
   const fileName = `salesorder_${salesOrderId}.xlsx`;
   const filePath = path.join(EXCEL_DIRECTORY, fileName);
@@ -382,7 +535,7 @@ export const generateExcel = async (salesOrderId: number): Promise<string> => {
 
   // ==== HEADER TABEL ITEM ====
   const tableHeaders = [
-    'NO', 'PART NO', 'DESCRIPTION', 'QTY', 'UNIT', 'UNIT PRICE', 'PPN - 11%', 'UNIT SELL PRICE IDR', 'TOTAL PRICE'
+    'NO', 'PART NO', 'DESCRIPTION', 'QTY', 'UNIT', 'UNIT PRICE', 'PPN%', 'UNIT SELL PRICE IDR', 'TOTAL PRICE'
   ];
   for (let i = 0; i < tableHeaders.length; i++) {
     const col = String.fromCharCode(65 + i); // A, B, ...
@@ -400,22 +553,33 @@ export const generateExcel = async (salesOrderId: number): Promise<string> => {
   // ==== DATA ROWS ====
   let row = 16;
   let totalPriceSum = 0;
-  salesOrder.SalesOrderDetails.forEach((detail, idx) => {
+
+  pricingResult.details.forEach((item, idx) => {
+    const detail = salesOrder.SalesOrderDetails[idx];
+
     const no = idx + 1;
     const partNo = detail.ItemCode.PartNumber?.Name || '-';
     const desc = detail.ItemCode.PartNumber?.Description || 'No Description';
-    const qty = detail.Quantity;
+    const qty = item.Quantity;
     const unit = 'MT';
-    const price = detail.Price;
-    const ppn = Math.round(price * 0.11);
-    const sellPrice = price + ppn;
-    const total = sellPrice * qty;
+    const price = item.Price;
+    const taxPercent = detail.Tax?.Percentage ?? 0; // Ambil dari database!
+    const ppnPerUnit = Math.round(item.TaxAmount / qty); // Amount per unit, dari API
+    const finalPrice = Math.round(item.FinalPrice / qty); // UNIT SELL PRICE, sudah +PPN
+    const total = item.FinalPrice;
 
     totalPriceSum += total;
 
-    const dataArr = [no, partNo, desc, qty, unit, price, ppn, sellPrice, total];
+    const dataArr = [
+      no, partNo, desc, qty, unit, price,
+      // Format: `${taxPercent}% | ${ppnPerUnit}` atau hanya amount saja
+      // Saran: amount saja, label atas sudah "PPN (%)"
+      taxPercent,
+      finalPrice, total
+    ];
+
     for (let i = 0; i < dataArr.length; i++) {
-      const col = String.fromCharCode(65 + i); // A, B, ...
+      const col = String.fromCharCode(65 + i);
       sheet.getCell(`${col}${row}`).value = dataArr[i];
       sheet.getCell(`${col}${row}`).alignment = { vertical: 'middle', horizontal: i === 2 ? 'left' : 'center', wrapText: true };
       sheet.getCell(`${col}${row}`).font = { size: 10 };
@@ -719,6 +883,7 @@ export const getSalesOrdersBySales = async (req: Request, res: Response): Promis
       where: {
         DealerId: { in: dealerIds },
         DeletedAt: null,
+        Status: { in: ["NEEDS_REVISION", "PENDING_APPROVAL"] }, // <-- FILTER STATUS di sini
       },
       include: {
         SalesOrderDetails: {
@@ -989,7 +1154,7 @@ export const updateSalesOrder = async (req: Request, res: Response): Promise<voi
       for (const detail of SalesOrderDetails) {
         const taxIdToUse = ForceApplyTax ? defaultTaxId : null;
         const taxRateToUse = ForceApplyTax ? defaultTaxRate : 0;
-        const finalPrice = detail.Price * detail.Quantity * (1 + taxRateToUse / 100);
+        const finalPrice = Math.round(detail.Price * detail.Quantity * (1 + taxRateToUse / 100));
 
         if (detail.Id && detail.Quantity > 0 && detail.Price) {
           await prisma.salesOrderDetail.update({

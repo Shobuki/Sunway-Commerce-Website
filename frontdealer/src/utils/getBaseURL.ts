@@ -5,6 +5,7 @@ export function getImageUrl(imagePath?: string) {
  
   if (!baseUrl) {
     baseUrl = "http://sunflexstoreindonesia.com:3000";
+   // baseUrl = "http://localhost:3000";
   }
 
   if (!imagePath) return "";

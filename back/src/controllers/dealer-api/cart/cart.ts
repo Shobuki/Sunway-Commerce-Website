@@ -115,17 +115,70 @@ export const addUpdateCart = async (req: Request, res: Response): Promise<void> 
       res.status(404).json({ message: "ItemCode not found." });
       return;
     }
+    // Ambil SEMUA itemcode satu part number untuk cek stok total (AllowItemCodeSelection = false)
+    const allItemCodes = await prisma.itemCode.findMany({
+      where: {
+        PartNumberId: requestItem.PartNumberId,
+        AllowItemCodeSelection: false,
+        DeletedAt: null
+      },
+      include: {
+        WarehouseStocks: { where: { DeletedAt: null } },
+        Price: {                           // ⬅️ TAMBAHKAN INI!
+          where: { DeletedAt: null },
+          include: { WholesalePrices: { where: { DeletedAt: null } } }
+        }
+      }
+    });
 
-    // --- Tambahkan di sini ---
-    const resolved = resolvePrice(requestItem.Price, dealerId, priceCategoryId, Quantity);
-    if (resolved.price === 0) {
-      res.status(400).json({ message: "Tidak ada harga aktif untuk dealer dan quantity ini." });
+    // Hitung total stok seluruh itemcode (akumulasi dari semua warehouse)
+    const totalStockAllWarehouse = allItemCodes.reduce(
+      (sum, ic) => sum + ic.WarehouseStocks.reduce((s, ws) => s + ws.QtyOnHand, 0),
+      0
+    );
+
+    if (Quantity > totalStockAllWarehouse) {
+      res.status(400).json({
+        message: "Stok total semua warehouse tidak mencukupi untuk permintaan quantity.",
+        detail: { Requested: Quantity, Available: totalStockAllWarehouse }
+      });
       return;
     }
-    if (resolved.source === "wholesale" && (Quantity < resolved.min || Quantity > resolved.max)) {
-      res.status(400).json({ message: `Qty harus antara ${resolved.min} dan ${resolved.max} untuk harga grosir.` });
-      return;
+
+    // PATCH: Perbolehkan cart asal SALAH SATU itemcode di partnumber punya harga
+let resolved = resolvePrice(requestItem.Price, dealerId, priceCategoryId, Quantity);
+
+if (resolved.price === 0) {
+  // Cek SEMUA itemCode lain dalam partnumber (AllowItemCodeSelection=false saja)
+  let fallbackPrice = null;
+  let fallbackItem = null;
+  for (const ic of allItemCodes) {
+    const r = resolvePrice(ic.Price, dealerId, priceCategoryId, Quantity);
+    if (r.price > 0) {
+      // Simpan harga termurah, kalau ada lebih dari satu
+      if (!fallbackPrice || r.price < fallbackPrice.price) {
+        fallbackPrice = r;
+        fallbackItem = ic;
+      }
     }
+  }
+  if (fallbackPrice && fallbackItem) {
+    // GUNAKAN fallback item untuk cart
+    requestItem.Id = fallbackItem.Id;
+    requestItem.MinOrderQuantity = fallbackItem.MinOrderQuantity;
+    requestItem.OrderStep = fallbackItem.OrderStep;
+    resolved = fallbackPrice;
+    // Lanjut proses seperti biasa di bawah ini
+  } else {
+    // Benar-benar tidak ada harga valid di seluruh itemCode partnumber tsb
+    res.status(400).json({ message: "Tidak ada harga aktif untuk dealer dan quantity ini (semua itemCode pada partnumber)." });
+    return;
+  }
+}
+if (resolved.source === "wholesale" && (Quantity < resolved.min || Quantity > resolved.max)) {
+  res.status(400).json({ message: `Qty harus antara ${resolved.min} dan ${resolved.max} untuk harga grosir.` });
+  return;
+}
 
 
     // Setelah requestItem diambil...
@@ -232,9 +285,53 @@ export const addUpdateCart = async (req: Request, res: Response): Promise<void> 
       }
     });
 
-    // Step 3: Filter hanya itemcode yang punya harga valid
-    const validItemCodes = itemCodes.filter(item =>
-      item.Price.some(p =>
+    // === AKUMULASI breakdown dari semua itemCode & semua warehouse (tanpa filter harga) ===
+    let qtyNeeded = Quantity;
+    const assignment: { ItemCodeId: number, WarehouseId: number, QtyAssigned: number }[] = [];
+    for (const ic of allItemCodes) {
+      for (const ws of ic.WarehouseStocks) {
+        if (ws.QtyOnHand > 0 && qtyNeeded > 0) {
+          const assignQty = Math.min(ws.QtyOnHand, qtyNeeded);
+          assignment.push({ ItemCodeId: ic.Id, WarehouseId: ws.WarehouseId, QtyAssigned: assignQty });
+          qtyNeeded -= assignQty;
+          if (qtyNeeded === 0) break;
+        }
+      }
+      if (qtyNeeded === 0) break;
+    }
+    if (qtyNeeded > 0) {
+      res.status(400).json({
+        message: "Stok tidak cukup di semua warehouse (sinkron getOrderRules).",
+        detail: { Needed: Quantity, Collected: Quantity - qtyNeeded, Breakdown: assignment }
+      });
+      return;
+    }
+    const assignmentWithPrice = assignment.map(asg => {
+      // Cari itemCode detail dari allItemCodes
+      const itemDetail = allItemCodes.find(ic => ic.Id === asg.ItemCodeId);
+      let resolved = null;
+      if (itemDetail) {
+        resolved = resolvePrice(itemDetail.Price, dealerId, priceCategoryId, asg.QtyAssigned);
+      }
+      // Kalau resolved.price > 0 artinya ada harga, jika tidak, price = null
+      return {
+        ...asg,
+        Price: (resolved && resolved.price > 0) ? resolved.price : null, // <= set null jika tidak ada harga
+        PriceSource: (resolved && resolved.price > 0) ? resolved.source : null,
+      };
+    });
+
+    // Jika tidak ada satu pun assignment yang punya price, maka seluruh price null
+    const anyHasPrice = assignmentWithPrice.some(asg => asg.Price !== null);
+
+    // NOTE: Untuk cart bisa saja masih pakai salah satu saja, tapi waktu generate SalesOrderDetail gunakan assignmentWithPrice sebagai referensi split
+
+    // Untuk Cart: ambil salah satu saja, misal assignmentWithPrice[0], price diisi null/0
+    const bestAssignment = assignmentWithPrice[0];
+
+    // === Setelah stok terbukti cukup, baru cek harga valid seperti getOrderRules ===
+    const validItemCodes = allItemCodes.filter(item =>
+      item.Price.some((p: { DealerId: number | null; PriceCategoryId: number | null; WholesalePrices: string | any[]; }) =>
         (p.DealerId === dealerId && p.PriceCategoryId == null) ||
         (p.DealerId == null && p.PriceCategoryId === priceCategoryId) ||
         (p.WholesalePrices && p.WholesalePrices.length > 0)
@@ -244,74 +341,30 @@ export const addUpdateCart = async (req: Request, res: Response): Promise<void> 
       res.status(400).json({ message: "Tidak ada item dengan harga aktif untuk dealer ini." });
       return;
     }
-
-    // Step 4: Ambil urutan dealer-warehouse
-    const dealerWarehouses = await prisma.dealerWarehouse.findMany({
-      where: { DealerId: dealerId },
-      orderBy: { Priority: "asc" },
-      select: { WarehouseId: true, Priority: true }
-    });
-    const warehouseDealerIds = dealerWarehouses.map(dw => dw.WarehouseId);
-
-    // Step 5: Susun kandidat kombinasi warehouse dalam dealer-warehouse
-    // Susun {ItemCodeId, warehouseId, stok} urut dealer-warehouse priority dulu, baru warehouse luar
-    const warehouseBreakdown: { ItemCodeId: number; WarehouseId: number; QtyOnHand: number }[] = [];
-
-    validItemCodes.forEach(item => {
-      // warehouse dealer-warehouse (priority dulu)
-      item.WarehouseStocks.forEach(ws => {
-        if (warehouseDealerIds.includes(ws.WarehouseId) && ws.QtyOnHand > 0) {
-          warehouseBreakdown.push({ ItemCodeId: item.Id, WarehouseId: ws.WarehouseId, QtyOnHand: ws.QtyOnHand });
-        }
-      });
-    });
-
-    // Step 6: Split quantity berdasarkan stok dealer-warehouse (priority urutan warehouseDealerIds)
-    let totalCollected = 0;
-    const assignment: { ItemCodeId: number, WarehouseId: number, QtyAssigned: number }[] = [];
-    for (const whId of warehouseDealerIds) {
-      // Cari semua ItemCode dengan stok di warehouse ini
-      for (const item of validItemCodes) {
-        const stock = item.WarehouseStocks.find(ws => ws.WarehouseId === whId)?.QtyOnHand || 0;
-        if (stock > 0 && totalCollected < Quantity) {
-          const needed = Quantity - totalCollected;
-          const assignQty = Math.min(stock, needed);
-          assignment.push({ ItemCodeId: item.Id, WarehouseId: whId, QtyAssigned: assignQty });
-          totalCollected += assignQty;
-          if (totalCollected >= Quantity) break;
+    // Pilih item dengan harga termurah
+    let chosenItem: any = null;
+    let chosenPrice: any = null;
+    for (const ic of validItemCodes) {
+      const resolved = resolvePrice(ic.Price, dealerId, priceCategoryId, Quantity);
+      if (resolved.price > 0) {
+        if (!chosenPrice || resolved.price < chosenPrice.price) {
+          chosenItem = ic;
+          chosenPrice = resolved;
         }
       }
-      if (totalCollected >= Quantity) break;
+    }
+    if (!chosenItem) {
+      res.status(400).json({ message: "Tidak ada item dengan harga aktif untuk dealer ini." });
+      return;
     }
 
-    // Step 7: Jika stok di dealer-warehouse kurang, baru ambil dari warehouse lain (stok terbanyak)
-    if (totalCollected < Quantity) {
-      // Cari warehouse di luar dealer (stok terbanyak dulu)
-      const otherWarehouseEntries: { ItemCodeId: number, WarehouseId: number, QtyOnHand: number }[] = [];
-      validItemCodes.forEach(item => {
-        item.WarehouseStocks.forEach(ws => {
-          if (!warehouseDealerIds.includes(ws.WarehouseId) && ws.QtyOnHand > 0) {
-            otherWarehouseEntries.push({ ItemCodeId: item.Id, WarehouseId: ws.WarehouseId, QtyOnHand: ws.QtyOnHand });
-          }
-        });
-      });
-      // Urutkan berdasarkan stok terbanyak (descending)
-      otherWarehouseEntries.sort((a, b) => b.QtyOnHand - a.QtyOnHand);
-
-      for (const entry of otherWarehouseEntries) {
-        if (totalCollected >= Quantity) break;
-        const needed = Quantity - totalCollected;
-        const assignQty = Math.min(entry.QtyOnHand, needed);
-        assignment.push({ ...entry, QtyAssigned: assignQty });
-        totalCollected += assignQty;
-      }
+    // Validasi MinOrder dan Step
+    if (chosenItem.MinOrderQuantity && Quantity < chosenItem.MinOrderQuantity) {
+      res.status(400).json({ message: `Minimum order quantity is ${chosenItem.MinOrderQuantity}` });
+      return;
     }
-
-    if (totalCollected < Quantity) {
-      res.status(400).json({
-        message: "Stok tidak cukup baik di dealer-warehouse maupun warehouse lain.",
-        detail: { Needed: Quantity, Collected: totalCollected, Breakdown: assignment }
-      });
+    if (chosenItem.OrderStep && Quantity % chosenItem.OrderStep !== 0) {
+      res.status(400).json({ message: `Quantity must be multiples of ${chosenItem.OrderStep}` });
       return;
     }
 
@@ -323,8 +376,12 @@ export const addUpdateCart = async (req: Request, res: Response): Promise<void> 
     assignment.sort((a, b) => b.QtyAssigned - a.QtyAssigned);
     const best = assignment[0];
 
+    const bestItem = allItemCodes.find(ic => ic.Id === best.ItemCodeId); // <-- pakai allItemCodes BUKAN validItemCodes!
+    if (!bestItem) {
+      res.status(400).json({ message: "Tidak ditemukan item pada assignment stok (periksa data stok master)." });
+      return;
+    }
     // Validasi MinOrder dan Step
-    const bestItem = validItemCodes.find(ic => ic.Id === best.ItemCodeId)!;
     if (bestItem.MinOrderQuantity && Quantity < bestItem.MinOrderQuantity) {
       res.status(400).json({ message: `Minimum order quantity is ${bestItem.MinOrderQuantity}` });
       return;
@@ -470,6 +527,25 @@ export const getOrderRules = async (req: Request, res: Response) => {
     const resolved = resolvePrice(item.Price, dealerId, priceCategoryId, Quantity ?? 1);
     const totalStock = item.WarehouseStocks.reduce((sum, ws) => sum + ws.QtyOnHand, 0);
 
+    // 🚩 Tambahan filter stok global:
+    if ((Quantity ?? 1) > totalStock) {
+      res.status(400).json({
+        AllowSelection: true,
+        Message: "Total stock every warehouse not enough.",
+        TotalStock: totalStock,
+        PriceValid: false,
+        StockValid: false,
+        MinOrderQuantity: item.MinOrderQuantity || 1,
+        OrderStep: item.OrderStep ?? null,
+        Price: null,
+        PriceSource: null,
+        MinQtyWholesale: null,
+        MaxQtyWholesale: null,
+        ActiveTax: activeTax,
+      });
+      return;
+    }
+
     // Cari wholesale info
     let minWholesale = null, maxWholesale = null;
     const priceObj = item.Price.find(p =>
@@ -489,7 +565,7 @@ export const getOrderRules = async (req: Request, res: Response) => {
     res.status(200).json({
       AllowSelection: true,
       MinOrderQuantity: item.MinOrderQuantity || 1,
-      OrderStep: item.OrderStep || 1,
+      OrderStep: item.OrderStep ?? null,
       TotalStock: totalStock,
       Price: resolved.price,
       PriceSource: resolved.source,
@@ -510,26 +586,75 @@ export const getOrderRules = async (req: Request, res: Response) => {
 
   // 5. Jika AllowItemCodeSelection: false → rules pakai item lain di partnumber
   const itemCodes = item.PartNumber?.ItemCode.filter(i => !i.AllowItemCodeSelection) || [];
+  // ----> Tambah ini dulu <---- //
+  const totalStockAll = itemCodes.reduce(
+    (sum, ic) => sum + ic.WarehouseStocks.reduce((s, ws) => s + ws.QtyOnHand, 0),
+    0
+  );
+
+  let warehouseGroup: { [warehouseId: number]: number } = {};
+  for (const ic of itemCodes) {
+    for (const ws of ic.WarehouseStocks) {
+      if (ws.QtyOnHand > 0) {
+        warehouseGroup[ws.WarehouseId] = (warehouseGroup[ws.WarehouseId] || 0) + ws.QtyOnHand;
+      }
+    }
+  }
+  const stockBreakdown = Object.entries(warehouseGroup).map(([WarehouseId, QtyOnHand]) => ({
+    WarehouseId: Number(WarehouseId),
+    QtyOnHand
+  }));
+  // ----> Sampai sini <---- //
+
+  // Lanjut ke pemilihan chosenItem dsb...
   let chosenItem: any = null;
   let chosenPrice: any = null;
   let chosenStock = 0;
-  let maxStock = 0;
 
+  // Cari item dengan harga valid (yang terendah) dan punya stok di warehouse mana pun
   for (const ic of itemCodes) {
     const resolved = resolvePrice(ic.Price, dealerId, priceCategoryId, Quantity ?? 1);
-    const totalStock = ic.WarehouseStocks.reduce((sum, ws) => sum + ws.QtyOnHand, 0);
-    if (resolved.price > 0 && totalStock >= (Quantity ?? 1) && totalStock > maxStock) {
-      chosenItem = ic;
-      chosenPrice = resolved;
-      chosenStock = totalStock;
-      maxStock = totalStock;
+    const stok = ic.WarehouseStocks.reduce((sum, ws) => sum + ws.QtyOnHand, 0);
+    if (resolved.price > 0 && stok > 0) {
+      if (!chosenPrice || resolved.price < chosenPrice.price) {
+        chosenItem = ic;
+        chosenPrice = resolved;
+        chosenStock = stok;
+      }
     }
   }
 
+  // Jika tidak ada item yang harga valid, return error lama
   if (!chosenItem) {
+    const itemWithValidPrice = itemCodes.find(ic => {
+      const resolved = resolvePrice(ic.Price, dealerId, priceCategoryId, Quantity ?? 1);
+      return resolved.price > 0;
+    });
+
+    if (itemWithValidPrice) {
+      // Ada item harga valid, tapi stok tidak cukup
+      const totalStock = itemWithValidPrice.WarehouseStocks.reduce((sum, ws) => sum + ws.QtyOnHand, 0);
+      res.status(400).json({
+        AllowSelection: false,
+        Message: "Stock not enough.",
+        MinOrderQuantity: itemWithValidPrice.MinOrderQuantity || null,
+        OrderStep: itemWithValidPrice.OrderStep || null,
+        Price: null,
+        PriceSource: null,
+        MinQtyWholesale: null,
+        MaxQtyWholesale: null,
+        TotalStock: totalStock,
+        PriceValid: true,
+        StockValid: false,
+        ActiveTax: activeTax,
+      });
+      return;
+    }
+
+    // Tidak ada harga valid sama sekali
     res.status(400).json({
       AllowSelection: false,
-      Message: "Tidak ada item dengan harga dan stok yang valid untuk dealer ini.",
+      Message: "No price data, can't buy.",
       MinOrderQuantity: null,
       OrderStep: null,
       Price: null,
@@ -544,7 +669,7 @@ export const getOrderRules = async (req: Request, res: Response) => {
     return;
   }
 
-  // Cari wholesale info pada chosenItem
+  // --- Untuk yang stok cukup dan ada harga valid ---
   let minWholesale = null, maxWholesale = null;
   const priceObj = chosenItem.Price.find((p: { DealerId: number; WholesalePrices: string | any[]; }) =>
     p.DealerId === dealerId && p.WholesalePrices && p.WholesalePrices.length > 0
@@ -560,20 +685,24 @@ export const getOrderRules = async (req: Request, res: Response) => {
     maxWholesale = range.max;
   }
 
+  // Jika sampai di sini, berarti stok cukup dan harga valid
   res.status(200).json({
     AllowSelection: false,
     PartNumber: item.PartNumber?.Name,
     MinOrderQuantity: chosenItem.MinOrderQuantity || 1,
-    OrderStep: chosenItem.OrderStep || 1,
-    TotalStock: chosenStock,
+    OrderStep: chosenItem.OrderStep ?? null,
+    TotalStock: totalStockAll,
+    StockBreakdown: stockBreakdown, // <- semua warehouse semua itemCode!
     Price: chosenPrice.price,
     PriceSource: chosenPrice.source,
     MinQtyWholesale: minWholesale,
     MaxQtyWholesale: maxWholesale,
     PriceValid: chosenPrice.price > 0,
-    StockValid: chosenStock >= (Quantity ?? 1),
+    StockValid: totalStockAll >= (Quantity ?? 1),
     ActiveTax: activeTax,
-    Message: "OK",
+    Message: totalStockAll >= (Quantity ?? 1)
+      ? "OK, stok cukup (termasuk dari warehouse lain jika dibutuhkan)"
+      : "Stock not enough.",
   });
 };
 
@@ -675,56 +804,92 @@ export const getCartByUserId = async (req: Request, res: Response): Promise<void
     }
 
     const transformedCart = {
-      Id: cart.Id,
-      UserId: cart.UserId,
-      CreatedAt: cart.CreatedAt,
-      DeletedAt: cart.DeletedAt,
-      CartItems: cart.CartItems.map(item => {
-        const code = item.ItemCode;
-        const allow = code.AllowItemCodeSelection;
+  Id: cart.Id,
+  UserId: cart.UserId,
+  CreatedAt: cart.CreatedAt,
+  DeletedAt: cart.DeletedAt,
+  CartItems: await Promise.all(cart.CartItems.map(async item => {
+    const code = item.ItemCode;
+    const allow = code.AllowItemCodeSelection;
 
-        const resolved = resolvePrice(
-          code.Price,
-          cart.User.DealerId,
-          cart.User.Dealer?.PriceCategoryId,
-          item.Quantity
-        );
+    let resolved = resolvePrice(
+      code.Price,
+      cart.User.DealerId,
+      cart.User.Dealer?.PriceCategoryId,
+      item.Quantity
+    );
 
-        const totalStock = code.WarehouseStocks?.reduce((sum, ws) => sum + ws.QtyOnHand, 0) ?? 0;
-        const finalPrice = (resolved.price && totalStock > 0) ? resolved.price : 0;
+    let totalStock = code.WarehouseStocks?.reduce((sum, ws) => sum + ws.QtyOnHand, 0) ?? 0;
+    let finalPrice = (resolved.price && totalStock > 0) ? resolved.price : 0;
+    let priceSource = resolved.source;
+    let minWholesale = resolved.min;
+    let maxWholesale = resolved.max;
 
-
-        return {
-          Id: item.Id,
-          CartId: item.CartId,
-          ItemCodeId: item.ItemCodeId,
-          Quantity: item.Quantity,
-          CreatedAt: item.CreatedAt,
-          DeletedAt: item.DeletedAt,
-          DisplayName: allow
-            ? code.Name
-            : code.PartNumber?.Name ?? 'Unnamed PartNumber',
-          Price: finalPrice, // ✅ tambahkan ini
-          PriceSource: resolved.source,         // <--- opsional, biar tahu dari mana harga diambil
-          MinQtyWholesale: resolved.min,        // <--- opsional, jika dari grosir
-          MaxQtyWholesale: resolved.max,
-          ItemCode: {
-            Id: code.Id,
-            CreatedAt: code.CreatedAt,
-            DeletedAt: code.DeletedAt,
-            Weight: code.Weight,
-            AllowItemCodeSelection: code.AllowItemCodeSelection,
-            MinOrderQuantity: code.MinOrderQuantity,
-            QtyPO: code.QtyPO,
-            OrderStep: code.OrderStep,
-            PartNumberId: code.PartNumberId,
-            PartNumber: code.PartNumber,
-            ...(allow ? { Name: code.Name } : {})
+    // ---- PATCH: Jika tidak ada harga, ambil harga tertinggi dari semua ItemCode dalam partnumber yang sama ----
+    if ((!resolved.price || resolved.price === 0) && code.PartNumberId && !allow) {
+      // Query semua itemcode pada partnumber yg sama (allow selection false saja)
+      const partItemCodes = await prisma.itemCode.findMany({
+        where: {
+          PartNumberId: code.PartNumberId,
+          AllowItemCodeSelection: false,
+          DeletedAt: null
+        },
+        include: {
+          Price: {
+            where: { DeletedAt: null },
+            include: { WholesalePrices: { where: { DeletedAt: null } } }
           }
-        };
+        }
+      });
 
-      })
+      // Dari semua itemcode tsb, cek harga yg valid, ambil TERTINGGI
+      let maxResolved: { price: number, source: string | null, min?: number, max?: number } = { price: 0, source: null };
+      for (const ic of partItemCodes) {
+        // Pakai quantity item di cart
+        const r = resolvePrice(ic.Price, cart.User.DealerId, cart.User.Dealer?.PriceCategoryId, item.Quantity);
+        if (r.price > maxResolved.price) {
+          maxResolved = r;
+        }
+      }
+      if (maxResolved.price > 0) {
+        finalPrice = maxResolved.price;
+        priceSource = maxResolved.source;
+        minWholesale = maxResolved.min;
+        maxWholesale = maxResolved.max;
+      }
+    }
+    // ---- END PATCH ----
+
+    return {
+      Id: item.Id,
+      CartId: item.CartId,
+      ItemCodeId: item.ItemCodeId,
+      Quantity: item.Quantity,
+      CreatedAt: item.CreatedAt,
+      DeletedAt: item.DeletedAt,
+      DisplayName: allow
+        ? code.Name
+        : code.PartNumber?.Name ?? 'Unnamed PartNumber',
+      Price: finalPrice,
+      PriceSource: priceSource,
+      MinQtyWholesale: minWholesale,
+      MaxQtyWholesale: maxWholesale,
+      ItemCode: {
+        Id: code.Id,
+        CreatedAt: code.CreatedAt,
+        DeletedAt: code.DeletedAt,
+        Weight: code.Weight,
+        AllowItemCodeSelection: code.AllowItemCodeSelection,
+        MinOrderQuantity: code.MinOrderQuantity,
+        QtyPO: code.QtyPO,
+        OrderStep: code.OrderStep,
+        PartNumberId: code.PartNumberId,
+        PartNumber: code.PartNumber,
+        ...(allow ? { Name: code.Name } : {})
+      }
     };
+  }))
+};
 
     res.status(200).json({
       message: "Cart retrieved successfully.",

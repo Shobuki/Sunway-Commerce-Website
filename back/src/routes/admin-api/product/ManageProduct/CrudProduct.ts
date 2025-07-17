@@ -17,6 +17,10 @@ import {
 } from "../../../../controllers/admin-api/product/CrudProductImage"
 
 import {
+uploadProductSpecificationFile,getProductSpecificationFile,downloadProductSpecificationFile,deleteProductSpecificationFile,
+} from "../../../../controllers/admin-api/product/CrudProductSpecification"
+
+import {
   upsertProductCategory,
   deleteProductCategory,
   getAllProductCategories,
@@ -127,6 +131,27 @@ router.delete("/products/images/:Id",
   adminAuth,
   authorizeMenuFeatureAccess("product", "deleteproduct"),
   deleteProductImage);
+
+
+//product specification file routes
+router.post("/products/specification-files/upload",
+  adminAuth,
+  authorizeMenuFeatureAccess("product", "editproduct"), 
+  uploadProductSpecificationFile);
+router.post("/products/specification-files/product",
+  adminAuth,
+  authorizeMenuAccess("product"),
+  getProductSpecificationFile);
+router.post("/products/specification-files/download",
+  adminAuth,
+  authorizeMenuAccess("product"),
+  downloadProductSpecificationFile);
+router.post("/products/specification-files/delete",
+  adminAuth,
+  authorizeMenuFeatureAccess("product", "deleteproduct"),
+  deleteProductSpecificationFile);
+  
+
 
 // ProductCategory Routes
 // Create/edit kategori

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import debounce from 'lodash.debounce';
 import { useRouter } from 'next/router';
 import Navbar from '../../components/header/navbar';
 
@@ -46,8 +47,12 @@ const CheckoutPage = () => {
   const [activeTaxes, setActiveTaxes] = useState<Record<number, { Id: number; Name: string; Percentage: number }>>({});
   const [uniqueTax, setUniqueTax] = useState<{ Id: number, Percentage: number, Name: string } | null>(null);
   const [taxError, setTaxError] = useState<string | null>(null);
+  const [stockRules, setStockRules] = useState<Record<number, number>>({});
+  const [stockErrors, setStockErrors] = useState<Record<number, string>>({});
 
   // Konstanta untuk tarif pajak (11%)
+  // Subtotal harga barang (tanpa pajak, tanpa pembulatan)
+
 
   useEffect(() => {
     setUserId(sessionStorage.getItem('userId'));
@@ -113,6 +118,25 @@ const CheckoutPage = () => {
     // eslint-disable-next-line
   }, [cart]);
 
+  useEffect(() => {
+    if (!cart || cart.CartItems.length === 0) {
+      setPricingSummary(null);
+      return;
+    }
+    const items = cart.CartItems.map((item) => ({
+      ItemCodeId: item.ItemCodeId,
+      Quantity: localQuantities[item.ItemCodeId] ?? item.Quantity,
+      Price: item.Price,
+      // Kalau FE tahu tax masing2, bisa kirim TaxPercentage
+      TaxPercentage: activeTaxes[item.ItemCodeId]?.Percentage ?? undefined,
+    }));
+
+    fetchPricingSummary(items, !!uniqueTax)
+      .then((result) => setPricingSummary(result))
+      .catch(() => setPricingSummary(null));
+    // eslint-disable-next-line
+  }, [cart, localQuantities, activeTaxes, uniqueTax]);
+
   const fetchCart = async () => {
     if (!userId || !token) return;
 
@@ -160,9 +184,75 @@ const CheckoutPage = () => {
       ...prev,
       [itemCodeId]: { min: data.MinOrderQuantity, step: data.OrderStep },
     }));
+    setStockRules((prev) => ({
+      ...prev,
+      [itemCodeId]: data.TotalStock // <- simpan TotalStock
+    }));
 
     return data;
   };
+
+  const debouncedUpdate = React.useRef(
+    debounce((itemId: number, value: number) => {
+      validateAndUpdate(itemId, value);
+    }, 500)
+  ).current;
+
+  if (cart) {
+    console.log('===== [CHECKOUT PAGE] =====');
+    cart.CartItems.forEach((item, idx) => {
+      const qty = localQuantities[item.ItemCodeId] ?? item.Quantity;
+      const price = item.Price || 0;
+      const tax = activeTaxes[item.ItemCodeId]?.Percentage ?? uniqueTax?.Percentage ?? 0;
+      const subtotal = price * qty;
+      const finalPerItem = Math.round(qty * price * (1 + tax / 100));
+      console.log(`[${idx}]`, {
+        ItemCodeId: item.ItemCodeId,
+        Qty: qty,
+        Price: price,
+        Tax: tax,
+        Subtotal: subtotal,
+        FinalWithTax: finalPerItem,
+      });
+    });
+    const sumQty = cart.CartItems.reduce((sum, item) => sum + (localQuantities[item.ItemCodeId] ?? item.Quantity), 0);
+    const sumFinal = cart.CartItems.reduce((sum, item) => {
+      const qty = localQuantities[item.ItemCodeId] ?? item.Quantity;
+      const price = item.Price || 0;
+      const tax = activeTaxes[item.ItemCodeId]?.Percentage ?? uniqueTax?.Percentage ?? 0;
+      return sum + Math.round(qty * price * (1 + tax / 100));
+    }, 0);
+    console.log('TOTAL QTY:', sumQty, 'TOTAL FINAL PRICE:', sumFinal);
+  }
+
+  async function fetchPricingSummary(items: {
+    ItemCodeId: number;
+    Quantity: number;
+    Price: number;
+    TaxPercentage?: number | null;
+  }[], forceApplyActiveTax: boolean = false) {
+    const token = sessionStorage.getItem("userToken");
+    const res = await fetch("/api/global/pricing/calculate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        details: items,
+        forceApplyActiveTax,
+      }),
+    });
+    if (!res.ok) throw new Error("Gagal kalkulasi harga");
+    return await res.json();
+  }
+  const [pricingSummary, setPricingSummary] = useState<null | {
+    details: any[];
+    subtotal: number;
+    totalTax: number;
+    totalWithTax: number;
+    activeTax?: { Id: number; Name?: string; Percentage: number } | null;
+  }>(null);
 
   const updateQuantityBackend = async (itemId: number, quantity: number) => {
     try {
@@ -207,19 +297,44 @@ const CheckoutPage = () => {
   };
 
   const validateAndUpdate = async (itemId: number, newQty: number) => {
-    const rules = orderRules[itemId] || await fetchOrderRules(itemId);
-    const min = rules.min;
-    const step = rules.step;
+    const rules = orderRules[itemId] || await fetchOrderRules(itemId); // pastikan rules pasti ada
+    const min = rules.min ?? 1; // <- pastikan tidak undefined
+    const step = rules.step ?? null;
+    const totalStock = stockRules[itemId] ?? Number.POSITIVE_INFINITY;
+
+    // Validasi qty
+    let errorMsg = "";
+    if (newQty > totalStock) {
+      errorMsg = `Permintaan melebihi stok maksimal: ${totalStock}`;
+      setStockErrors((prev) => ({ ...prev, [itemId]: errorMsg }));
+      setError(errorMsg);
+      setTimeout(() => setError(null), 4000);
+      return; // BLOCK update
+    } else {
+      setStockErrors((prev) => {
+        const copy = { ...prev };
+        delete copy[itemId];
+        return copy;
+      });
+    }
 
     setLocalQuantities((prev) => ({ ...prev, [itemId]: newQty }));
 
-    const isValid = newQty >= min && newQty % step === 0;
+    let isValid = newQty >= min;
+    if (step && step > 0) {
+      // Toleransi pembulatan floating point
+      isValid = isValid && (Math.abs((newQty - min) % step) < 1e-8 || Math.abs(step - ((newQty - min) % step)) < 1e-8);
+    }
     if (isValid) {
       await updateQuantityBackend(itemId, newQty);
       setError(null);
     } else {
-      setError(`Kuantitas harus ≥ ${min} dan kelipatan ${step}`);
-      setTimeout(() => setError(null), 5000);
+      if (step && step > 0) {
+        setError(`Kuantitas harus ≥ ${min} dan kelipatan ${step}`);
+      } else {
+        setError(`Kuantitas harus ≥ ${min}`);
+      }
+      setTimeout(() => setError(null), 4000);
     }
   };
 
@@ -256,19 +371,63 @@ const CheckoutPage = () => {
       setTimeout(() => setError(null), 3000);
     }
   };
-
+  const hasStockError = Object.keys(stockErrors).length > 0;
   const totalQty = cart?.CartItems.reduce((sum, i) => sum + i.Quantity, 0) || 0;
   const totalWeight = cart?.CartItems.reduce((sum, i) => sum + (i.ItemCode.Weight || 0) * i.Quantity, 0) || 0;
   const getTotalPricePerItem = (item: CartItem) => (item.Price || 0) * (localQuantities[item.ItemCodeId] ?? item.Quantity);
-  const grandTotalPrice = cart?.CartItems.reduce(
-    (sum, i) => sum + getTotalPricePerItem(i),
-    0
-  ) || 0;
+
 
   // Perhitungan Pajak
   const taxPercentage = uniqueTax?.Percentage || 0;
-  const taxAmount = grandTotalPrice * (taxPercentage / 100);
-  const finalTotalPrice = grandTotalPrice + taxAmount;
+
+  const getItemTaxPercentage = (item: CartItem) =>
+    activeTaxes[item.ItemCodeId]?.Percentage ?? uniqueTax?.Percentage ?? 0;
+  const subtotal = cart?.CartItems.reduce(
+    (sum, item) => sum + (item.Price || 0) * (localQuantities[item.ItemCodeId] ?? item.Quantity),
+    0
+  ) || 0;
+
+  // Total pajak (dari pembulatan per item)
+  const totalTax = cart?.CartItems.reduce((sum, item) => {
+    const qty = localQuantities[item.ItemCodeId] ?? item.Quantity;
+    const price = item.Price || 0;
+    const tax = getItemTaxPercentage(item);
+    const finalPerItem = Math.round(qty * price * (1 + tax / 100));
+    return sum + (finalPerItem - (qty * price));
+  }, 0) || 0;
+
+  // FINAL PRICE per item (sudah include pajak per item)
+  const getFinalPricePerItem = (item: CartItem) => {
+    const qty = localQuantities[item.ItemCodeId] ?? item.Quantity;
+    const price = item.Price || 0;
+    const tax = getItemTaxPercentage(item);
+    return Math.round(qty * price * (1 + tax / 100)); // <- BUKAN Math.floor, BUKAN di total, tapi per item!
+  }
+  // Grand total (total akhir)
+  const totalWithTax = cart?.CartItems.reduce(
+    (sum, item) => sum + getFinalPricePerItem(item), 0
+  ) || 0;
+
+
+
+  // Subtotal (harga barang sebelum pajak)
+  const subtotalPrice = cart?.CartItems.reduce(
+    (sum, item) => sum + (item.Price || 0) * (localQuantities[item.ItemCodeId] ?? item.Quantity),
+    0
+  ) || 0;
+
+  // Pajak total = Sum pajak per item
+
+
+
+
+
+  const getTotalFinalPricePerItem = (item: CartItem) => {
+    const qty = localQuantities[item.ItemCodeId] ?? item.Quantity;
+    const price = item.Price || 0;
+    const tax = activeTaxes[item.ItemCodeId]?.Percentage ?? (uniqueTax?.Percentage ?? 0);
+    return qty * price * (1 + tax / 100);
+  };
 
 
   return (
@@ -351,13 +510,15 @@ const CheckoutPage = () => {
                       </div>
                       <div className="flex justify-between text-base font-semibold text-gray-800 border-t border-gray-300 pt-1 mt-1">
                         <span>Subtotal Item:</span>
-                        <span>Rp {(getTotalPricePerItem(item)).toLocaleString()}</span>
+                        <span>
+                          Rp {pricingSummary?.details?.find(d => d.ItemCodeId === item.ItemCodeId)?.FinalPrice?.toLocaleString() ?? 0}
+                        </span>
                       </div>
                     </div>
 
                     {(orderRules[item.ItemCodeId]) ? (
                       <p className="text-xs text-gray-500 mt-2">
-                        Min Order: {orderRules[item.ItemCodeId].min} | Kelipatan: {orderRules[item.ItemCodeId].step}
+                        Min Order: {orderRules[item.ItemCodeId].min ?? '-'} | Kelipatan: {(orderRules[item.ItemCodeId].step && orderRules[item.ItemCodeId].step > 0) ? orderRules[item.ItemCodeId].step : '-'}
                       </p>
                     ) : (
                       <p className="text-xs text-gray-500 mt-2">Mengambil aturan pemesanan...</p>
@@ -393,12 +554,40 @@ const CheckoutPage = () => {
                       <input
                         type="number"
                         value={currentQuantity}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setLocalQuantities((prev) => ({ ...prev, [item.ItemCodeId]: val }));
+                        onChange={async (e) => {
+                          const value = e.target.value;
+                          if (value === "") {
+                            setLocalQuantities((prev) => {
+                              const updated = { ...prev };
+                              delete updated[item.ItemCodeId];
+                              return updated;
+                            });
+                            return;
+                          }
+                          if (/^\d*\.?\d*$/.test(value)) {
+                            const numVal = parseFloat(value);
+                            setLocalQuantities((prev) => ({
+                              ...prev,
+                              [item.ItemCodeId]: numVal
+                            }));
+
+                            // Cek apakah orderRules sudah ada
+                            if (!orderRules[item.ItemCodeId]) {
+                              await fetchOrderRules(item.ItemCodeId); // pastikan rules ada
+                            }
+                            // Debounced auto update
+                            debouncedUpdate(item.ItemCodeId, numVal);
+                          }
                         }}
+                        // onBlur: bisa tetap dipakai untuk backup
                         onBlur={() => {
-                          const val = localQuantities[item.ItemCodeId];
+                          let val = localQuantities[item.ItemCodeId];
+                          if (!val || isNaN(val)) {
+                            const fallback = orderRules[item.ItemCodeId]?.min || 1;
+                            setLocalQuantities((prev) => ({ ...prev, [item.ItemCodeId]: fallback }));
+                            validateAndUpdate(item.ItemCodeId, fallback);
+                            return;
+                          }
                           if (val === 0) {
                             updateQuantityBackend(item.ItemCodeId, 0);
                             setLocalQuantities((prev) => {
@@ -412,7 +601,7 @@ const CheckoutPage = () => {
                         }}
                         className="w-24 text-center border rounded px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
                         min={orderRules[item.ItemCodeId]?.min || 1}
-                        step={orderRules[item.ItemCodeId]?.step || 1}
+                        step={(orderRules[item.ItemCodeId]?.step && orderRules[item.ItemCodeId].step > 0) ? orderRules[item.ItemCodeId].step : 1}
                       />
 
                       <button
@@ -433,6 +622,11 @@ const CheckoutPage = () => {
                         +
                       </button>
                     </div>
+                    {stockErrors[item.ItemCodeId] && (
+                      <div className="text-sm text-red-600 mt-1">
+                        {stockErrors[item.ItemCodeId]}
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -452,25 +646,30 @@ const CheckoutPage = () => {
                   <span>Total Berat:</span>
                   <span className="font-semibold">{totalWeight.toFixed(2)} kg</span>
                 </p>
-                <div className="border-t border-gray-200 pt-2 mt-2"></div> {/* Garis pemisah */}
+                <div className="border-t border-gray-200 pt-2 mt-2"></div>
                 <p className="flex justify-between">
                   <span>Subtotal (Harga Barang):</span>
-                  <span className="font-semibold">Rp {grandTotalPrice.toLocaleString()}</span>
+                  <span className="font-semibold">
+                    Rp {pricingSummary ? pricingSummary.subtotal.toLocaleString() : 0}
+                  </span>
                 </p>
                 <p className="flex justify-between">
-                  <span>Pajak ({taxPercentage}%):</span>
-                  <span className="font-semibold">Rp {taxAmount.toLocaleString()}</span>
+                  <span>Pajak ({pricingSummary?.activeTax?.Percentage ?? 0}%):</span>
+                  <span className="font-semibold">
+                    Rp {pricingSummary ? pricingSummary.totalTax.toLocaleString() : 0}
+                  </span>
                 </p>
-
                 <p className="flex justify-between text-lg font-bold mt-4 border-t pt-4 text-red-600">
                   <span>TOTAL AKHIR:</span>
-                  <span>Rp {finalTotalPrice.toLocaleString()}</span>
+                  <span>
+                    Rp {pricingSummary ? pricingSummary.totalWithTax.toLocaleString() : 0}
+                  </span>
                 </p>
               </div>
               <button
                 onClick={handleSubmitOrder}
                 className="mt-6 w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-lg text-lg font-semibold transition duration-200 ease-in-out"
-                disabled={!cart || cart.CartItems.length === 0 || !!taxError} // PATCH DI SINI!
+                disabled={!cart || cart.CartItems.length === 0 || !!taxError || hasStockError}
               >
                 Kirim Pesanan
               </button>

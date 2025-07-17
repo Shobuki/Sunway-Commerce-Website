@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "public"."EmailTemplateType" ADD VALUE 'ADMIN_NOTIFICATION_SALESORDER';

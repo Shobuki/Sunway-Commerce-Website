@@ -6,12 +6,13 @@ import path from 'path';
 
 import adminApiRouter from './routes/admin-api';
 import dealerApiRouter from './routes/dealer-api';
+import globalApiRouter from './routes/global-api';
 
 const app = express();
 
 const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:3001',
+ // 'http://localhost:3002',
+ // 'http://localhost:3001',
   'http://sunflexstoreindonesia.com:3001',
   'http://sunflexstoreindonesia.com:3002',
   'https://sunflexstoreindonesia.com',
@@ -77,6 +78,7 @@ app.use((req, res, next) => {
 
 app.use('/api/admin', adminApiRouter);
 app.use('/api/dealer', dealerApiRouter);
+app.use('/api/global', globalApiRouter);
 
 
 // Handle CORS preflight

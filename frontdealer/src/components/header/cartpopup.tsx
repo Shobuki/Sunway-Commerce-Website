@@ -50,43 +50,43 @@ const CartPopup: React.FC<CartPopupProps> = ({ isOpen, onClose }) => {
     }
   }, [isOpen]);
 
-const fetchCart = async () => {
-  const token = sessionStorage.getItem('userToken');
-  const userId = sessionStorage.getItem('userId');
-  if (!token || !userId) return;
+  const fetchCart = async () => {
+    const token = sessionStorage.getItem('userToken');
+    const userId = sessionStorage.getItem('userId');
+    if (!token || !userId) return;
 
-  try {
-    const res = await fetch('/api/dealer/dealer/cart/get', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ UserId: Number(userId) }),
-    });
+    try {
+      const res = await fetch('/api/dealer/dealer/cart/get', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ UserId: Number(userId) }),
+      });
 
-    if (res.status === 404) {
-      setCartItems([]);
+      if (res.status === 404) {
+        setCartItems([]);
+        setError(null);
+        return;
+      }
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      setCartItems(data.data.CartItems);
+
+      const qtyMap: Record<number, number> = {};
+      data.data.CartItems.forEach((item: CartItem) => {
+        qtyMap[item.ItemCodeId] = item.Quantity;
+        fetchOrderRule(item.ItemCodeId); // Fetch aturan min & step dari backend
+      });
+      setLocalQuantities(qtyMap);
       setError(null);
-      return;
+    } catch (err) {
+      console.error(err);
+      setError('Gagal mengambil data keranjang.');
     }
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message);
-    setCartItems(data.data.CartItems);
-
-    const qtyMap: Record<number, number> = {};
-    data.data.CartItems.forEach((item: CartItem) => {
-      qtyMap[item.ItemCodeId] = item.Quantity;
-      fetchOrderRule(item.ItemCodeId); // Fetch aturan min & step dari backend
-    });
-    setLocalQuantities(qtyMap);
-    setError(null);
-  } catch (err) {
-    console.error(err);
-    setError('Gagal mengambil data keranjang.');
-  }
-};
+  };
 
   const fetchOrderRule = async (itemCodeId: number) => {
     const token = sessionStorage.getItem('userToken');
@@ -143,24 +143,24 @@ const fetchCart = async () => {
   };
 
   const validateAndUpdate = async (itemId: number, newQty: number) => {
-  setLocalQuantities(prev => ({ ...prev, [itemId]: newQty }));
+    setLocalQuantities(prev => ({ ...prev, [itemId]: newQty }));
 
-  const item = cartItems.find(i => i.ItemCodeId === itemId);
-  if (!item) return;
+    const item = cartItems.find(i => i.ItemCodeId === itemId);
+    if (!item) return;
 
-  const rule = orderRules[item.ItemCodeId] || { MinOrderQuantity: 1, OrderStep: 1 };
-  const min = rule.MinOrderQuantity;
-  const step = rule.OrderStep;
+    const rule = orderRules[item.ItemCodeId] || { MinOrderQuantity: 1, OrderStep: 1 };
+    const min = rule.MinOrderQuantity;
+    const step = rule.OrderStep;
 
-  const isValid = newQty >= min && newQty % step === 0;
+    const isValid = newQty >= min && newQty % step === 0;
 
-  if (isValid) {
-    setError(null);
-    await updateQuantityBackend(itemId, newQty); // <- panggil ini, fetchCart jalan di dalamnya
-  } else {
-    setError(`❌ ${item.DisplayName} harus ≥ ${min} dan kelipatan ${step}`);
-  }
-};
+    if (isValid) {
+      setError(null);
+      await updateQuantityBackend(itemId, newQty); // <- panggil ini, fetchCart jalan di dalamnya
+    } else {
+      setError(`❌ ${item.DisplayName} harus ≥ ${min} dan kelipatan ${step}`);
+    }
+  };
 
   const handleQuantityChange = async (itemId: number, delta: number) => {
     const current = localQuantities[itemId] ?? 0;
@@ -266,9 +266,7 @@ const fetchCart = async () => {
 
               return (
                 <div key={item.Id} className="border-b pb-2">
-                  <h3 className="font-semibold">
-                    {item.DisplayName}
-                  </h3>
+                  <h3 className="font-semibold">{item.DisplayName}</h3>
                   <p className="text-sm text-gray-500">
                     Harga/unit: Rp {price.toLocaleString()}
                     {item.WholesalePrice && item.MinQtyWholesale && item.MaxQtyWholesale &&
@@ -278,7 +276,6 @@ const fetchCart = async () => {
                   </p>
                   <p className="text-sm text-gray-500">Total: Rp {totalItemHarga.toLocaleString()}</p>
                   <p className="text-sm text-gray-500">Min: {item.ItemCode.MinOrderQuantity || 1} | Step: {item.ItemCode.OrderStep || 1}</p>
-
                   <div className="flex items-center gap-2 mt-2">
                     <button
                       type="button"
@@ -312,13 +309,10 @@ const fetchCart = async () => {
               );
             })}
           </div>
-
           <div className="mt-4 text-sm text-gray-700 border-t pt-3">
             <p>Total Item: {totalQty}</p>
             <p>Total Harga: Rp {totalHarga.toLocaleString()}</p>
-
           </div>
-
           <button
             type="button"
             onClick={handleCheckout}
@@ -326,7 +320,6 @@ const fetchCart = async () => {
           >
             Checkout Sekarang
           </button>
-
         </>
       )}
     </div>

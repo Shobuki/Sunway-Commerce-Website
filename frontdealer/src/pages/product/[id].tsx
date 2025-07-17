@@ -154,7 +154,7 @@ const ProductDetail = () => {
               {isLoggedIn && (
                 <button
                   onClick={() => setIsPopupOpen(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg transition-all transform hover:scale-105"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-8 rounded-lg transition-all w-full sm:w-auto"
                 >
                   SELECT PRODUCT VARIANT
                 </button>
@@ -223,7 +223,7 @@ const ProductDetail = () => {
         {/* Popup Modal */}
         {isPopupOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col shadow-lg">
+            <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full h-[96vh] sm:max-w-6xl max-h-screen overflow-hidden flex flex-col shadow-lg mx-auto">
               {/* Header */}
               <div className="flex justify-between items-center bg-gray-800 px-6 py-4">
                 <h3 className="text-xl font-semibold text-white">Select Configuration</h3>

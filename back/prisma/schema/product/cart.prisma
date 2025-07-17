@@ -13,7 +13,7 @@ model CartItem {
   Id         Int       @id @default(autoincrement())
   CartId     Int
   ItemCodeId Int
-  Quantity   Int
+  Quantity   Float
   CreatedAt  DateTime  @default(now())
   DeletedAt  DateTime?
   Cart       Cart      @relation(fields: [CartId], references: [Id])

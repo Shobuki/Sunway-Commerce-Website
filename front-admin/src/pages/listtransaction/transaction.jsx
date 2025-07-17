@@ -86,6 +86,43 @@ const Transaction = () => {
     // eslint-disable-next-line
   }, [showModal]);
 
+useEffect(() => {
+  setWarehouseOptions(Array(updateDetails.length).fill([]));
+  // HAPUS baris berikut!
+  // setSelectedWarehouses(Array(updateDetails.length).fill(null));
+  updateDetails.forEach((d, idx) => {
+    if (d.ItemCodeId) {
+      fetchWarehouseForItemCodeSync(d.ItemCodeId, idx).then((data) => {
+        setWarehouseOptions(prev => {
+          const arr = [...prev];
+          arr[idx] = data || [];
+          return arr;
+        });
+      });
+    }
+  });
+}, [updateDetails]);
+
+
+  useEffect(() => {
+    if (!showModal || !updateDetails.length) {
+      setPricingSummary(null);
+      return;
+    }
+    const items = updateDetails.map((item) => ({
+      ItemCodeId: item.ItemCodeId,
+      Quantity: item.Quantity,
+      Price: item.Price,
+      TaxPercentage: forceApplyTax && activeTax
+        ? undefined
+        : (typeof item.TaxPercentage === "number" ? item.TaxPercentage : undefined),
+    }));
+
+    fetchPricingSummary(items, forceApplyTax)
+      .then((result) => setPricingSummary(result))
+      .catch(() => setPricingSummary(null));
+  }, [updateDetails, forceApplyTax, activeTax, showModal]);
+
   const fetchSalesOrders = async () => {
     try {
       const { data: result } = await axios.get("/api/admin/admin/salesorder/getall");
@@ -125,6 +162,7 @@ const Transaction = () => {
     // 3. Default selected warehouse (dari detail)
     const selectedWarehousesNow = mappedDetails.map(d => d.WarehouseId ?? d.Warehouse ?? null);
 
+    
     // 4. Set state (urutan penting)
     setSelectedOrder(order);
     setUpdateDetails(mappedDetails);
@@ -133,6 +171,8 @@ const Transaction = () => {
 
     // 5. Modal baru muncul **setelah semua siap**
     setShowModal(true);
+    console.log(mappedDetails); // dalam handleEditOrder
+console.log(selectedWarehousesNow);
   };
 
   const handleFilterChange = (e) => {
@@ -140,19 +180,14 @@ const Transaction = () => {
   };
 
   const handleDetailChange = (index, field, value) => {
-    const newDetails = [...updateDetails];
-    newDetails[index][field] = value;
-    if (forceApplyTax && activeTax) {
-      newDetails[index].FinalPrice = value * newDetails[index].Price * (1 + activeTax.Percentage / 100);
-    } else {
-      newDetails[index].FinalPrice = value * newDetails[index].Price;
-    }
-
-    setUpdateDetails(newDetails);
-
-
-
-  };
+  const newDetails = [...updateDetails];
+  newDetails[index][field] = value;
+  setUpdateDetails(newDetails);
+  // Jika field === "ItemCodeId", fetch warehouse-nya
+  if (field === "ItemCodeId") {
+    fetchWarehouseForItemCodeSync(value, index);
+  }
+};
 
   const fetchItemCodes = async (itemCodeId, query, index) => {
     // ⛔ Jangan fetch kalau query kosong DAN itemCodeId invalid
@@ -198,53 +233,30 @@ const Transaction = () => {
   };
 
 
-  const fetchWarehouseForItemCode = async (itemCodeId, index) => {
-    if (!itemCodeId) {
-      setWarehouseOptions(prev => {
-        const upd = [...prev];
-        upd[index] = [];
-        return upd;
-      });
-      return;
-    }
-    try {
-      const res = await axios.post(
-        "/api/admin/admin/salesorder/approval/fetchwarehouseforitemcode",
-        { ItemCodeId: itemCodeId }
-      );
-      const result = res.data;
-      if (result?.success && Array.isArray(result.data)) {
-        setWarehouseOptions(prev => {
-          const upd = [...prev];
-          upd[index] = result.data;
-          return upd;
-        });
-        // default warehouseId (dari detail), atau null
-        setSelectedWarehouses(prev => {
-          const upd = [...prev];
-          let defaultWarehouseId = null;
-          if (updateDetails[index]) {
-            defaultWarehouseId = updateDetails[index].WarehouseId ?? updateDetails[index].Warehouse ?? null;
-          }
-          if (defaultWarehouseId == null) {
-            upd[index] = null;
-          } else {
-            const ids = result.data.map(w => w.Id);
-            upd[index] = ids.includes(defaultWarehouseId) ? defaultWarehouseId : null;
-          }
-          return upd;
-        });
+
+
+  const [pricingSummary, setPricingSummary] = useState(null);
+
+  const fetchPricingSummary = async (
+    items,
+    forceApplyActiveTax = false
+  ) => {
+    const token = localStorage.getItem("token");
+    const res = await axios.post(
+      "/api/global/pricing/calculate",
+      {
+        details: items,
+        forceApplyActiveTax,
+      },
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       }
-    } catch {
-      setWarehouseOptions(prev => {
-        const upd = [...prev];
-        upd[index] = [];
-        return upd;
-      });
-    }
+    );
+    return res.data;
   };
 
   const fetchWarehouseForItemCodeSync = async (itemCodeId, index) => {
+     console.log('Fetching warehouse for', itemCodeId, 'at', index);
     if (!itemCodeId) return [];
     try {
       const res = await axios.post(
@@ -794,7 +806,11 @@ const Transaction = () => {
                             </select>
                           </td>
                           <td className="border px-2 py-1 bg-gray-50 text-gray-800 align-top">
-                            Rp {detail.FinalPrice.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            Rp {
+                              pricingSummary?.details?.[index]?.FinalPrice
+                                ? pricingSummary.details[index].FinalPrice.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : (detail.FinalPrice || 0).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            }
                           </td>
                           <td className="border text-center align-middle">
                             <button
@@ -817,23 +833,45 @@ const Transaction = () => {
                     </tbody>
                     <tfoot>
                       <tr>
-                        <td colSpan={3} className="text-right font-bold px-3 py-2 border">Total Keseluruhan:</td>
-                        <td className="border px-3 py-2 bg-gray-100 font-bold text-gray-800">
-                          Rp {updateDetails.reduce((sum, detail) => sum + (detail.FinalPrice || 0), 0).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <td colSpan={4} className="text-right font-bold px-3 py-2 border">Subtotal:</td>
+                        <td className="border px-3 py-2 text-gray-800">
+                          Rp {pricingSummary ? pricingSummary.subtotal.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 0}
                         </td>
                         <td className="border"></td>
+                      </tr>
+                      <tr>
+                        <td colSpan={4} className="text-right font-bold px-3 py-2 border">
+                          Pajak ({pricingSummary?.activeTax?.Percentage ?? 0}%):
+                        </td>
+                        <td className="border px-3 py-2 text-gray-800">
+                          Rp {pricingSummary ? pricingSummary.totalTax.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 0}
+                        </td>
+                        <td className="border"></td>
+                      </tr>
+                      <tr>
+                        <td colSpan={4} className="text-right font-bold px-3 py-2 border bg-gray-100">
+                          Total Keseluruhan:
+                        </td>
+                        <td className="border px-3 py-2 font-bold text-green-700 bg-gray-100">
+                          Rp {pricingSummary ? pricingSummary.totalWithTax.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 0}
+                        </td>
+                        <td className="border bg-gray-100"></td>
                       </tr>
                     </tfoot>
                   </table>
                   <button
                     onClick={() => {
-                      setUpdateDetails([...updateDetails, {
-                        ItemCodeId: 0,
-                        ItemCode: { Id: 0, Name: "Pilih Item Code", PartNumberId: 0 },
-                        Quantity: 1,
-                        Price: 0,
-                        FinalPrice: 0,
-                      }]);
+                      setUpdateDetails([
+                        ...updateDetails,
+                        {
+                          ItemCodeId: 0,
+                          ItemCode: { Id: 0, Name: "Pilih Item Code", PartNumberId: 0 },
+                          Quantity: 1,
+                          Price: 0,
+                          WarehouseId: null, // PASTIKAN ADA INI
+                          // JANGAN set FinalPrice
+                        },
+                      ]);
                       setDropdownOpen([...dropdownOpen, false]);
                       setItemCodeOptions([...itemCodeOptions, []]);
                       setWarehouseOptions([...warehouseOptions, []]);

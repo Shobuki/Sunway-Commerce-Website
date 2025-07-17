@@ -19,6 +19,7 @@ model SalesOrder {
   Sales               Sales              @relation(fields: [SalesId], references: [Id])
   User                User               @relation(fields: [UserId], references: [Id])
   SalesOrderDetails   SalesOrderDetail[]
+  AdminNotification   AdminNotification[]
   SalesOrderFile      SalesOrderFile?
 
   @@schema("public")
@@ -29,7 +30,7 @@ model SalesOrderDetail {
   SalesOrderId      Int
   ItemCodeId        Int
   WarehouseId       Int?
-  Quantity          Int
+  Quantity          Float
   Price             Float
   FinalPrice        Float
   PriceCategoryId   Int?
@@ -158,6 +159,7 @@ enum EmailTemplateType {
   SALES_ORDER
   FORGOT_PASSWORD_USER
   FORGOT_PASSWORD_ADMIN
+  ADMIN_NOTIFICATION_SALESORDER
 
   @@schema("public")
 }

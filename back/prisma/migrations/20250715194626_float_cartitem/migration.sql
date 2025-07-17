@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "public"."CartItem" ALTER COLUMN "Quantity" SET DATA TYPE DOUBLE PRECISION;
