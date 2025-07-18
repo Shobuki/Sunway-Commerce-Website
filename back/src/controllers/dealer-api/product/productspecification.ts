@@ -56,6 +56,40 @@ class ProductSpecification {
     }
   }
 
+  async getLatestProductSpecificationFile(req: Request, res: Response): Promise<void> {
+  try {
+    const { ProductId } = req.body;
+    if (!ProductId || isNaN(Number(ProductId))) {
+      res.status(400).json({ message: "Invalid Product ID" });
+      return;
+    }
+    const productIdNum = parseInt(ProductId, 10);
+
+    // Ambil satu file terbaru (DeletedAt: null, UploadedAt terbaru)
+    const spec = await prisma.productSpecificationFile.findFirst({
+      where: { ProductId: productIdNum, DeletedAt: null },
+      orderBy: { UploadedAt: "desc" }
+    });
+    if (!spec) {
+      res.status(404).json({ message: "No specification file found for this product." });
+      return;
+    }
+
+    res.status(200).json({
+      file: {
+        Id: spec.Id,
+        FileName: spec.FileName,
+        FilePath: spec.FilePath,
+        MimeType: spec.MimeType,
+        UploadedAt: spec.UploadedAt
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+
   // ===== DOWNLOAD/Preview file original, semua tipe (via body) =====
   async downloadProductSpecificationFile(req: Request, res: Response): Promise<void> {
     try {
@@ -87,10 +121,12 @@ class ProductSpecification {
 
 const dealerProductSpecController = new ProductSpecification();
 
+export const getLatestProductSpecificationFile = dealerProductSpecController.getLatestProductSpecificationFile.bind(dealerProductSpecController);
 export const getAllProductSpecificationFiles = dealerProductSpecController.getAllProductSpecificationFiles.bind(dealerProductSpecController);
 export const downloadProductSpecificationFile = dealerProductSpecController.downloadProductSpecificationFile.bind(dealerProductSpecController);
 
 export default {
+  getLatestProductSpecificationFile,
   getAllProductSpecificationFiles,
   downloadProductSpecificationFile,
 };

@@ -4,39 +4,45 @@ import dynamic from 'next/dynamic';
 import Navbar from '../../components/header/navbar';
 import { getImageUrl } from '../../utils/getBaseURL';
 
+
+const PdfPreview = dynamic(() => import('../../components/PdfPreview'), { ssr: false });
+const PopupChoose = dynamic(() => import('./popupchoose'), { ssr: false });
+
+// --- Interfaces
 interface ProductImage {
   Image: string;
 }
-// Tambahkan tipe prop onClose
 export interface PopupChooseProps {
   productId: number;
-  onClose?: () => void; // << tambah baris ini
+  onClose?: () => void;
 }
-
 interface PartNumberDetail {
   Id: number;
   Name: string;
   Description: string;
-  Dash: number;
-  InnerDiameter: number;
-  OuterDiameter: number;
-  WorkingPressure: number;
-  BurstingPressure: number;
-  BendingRadius: number;
-  HoseWeight: number;
+  Dash: number | null;
+  InnerDiameter: number | null;
+  OuterDiameter: number | null;
+  WorkingPressure: number | null;
+  BurstingPressure: number | null;
+  BendingRadius: number | null;
+  HoseWeight: number | null;
 }
-
 interface ProductDetail {
   Id: number;
   Name: string;
-  CodeName?: string; // ← tambahkan ini
+  CodeName?: string;
   Description: string;
   ProductImage: ProductImage[];
   PartNumber: PartNumberDetail[];
 }
-
-
-const PopupChoose = dynamic(() => import('./popupchoose'), { ssr: false });
+interface SpecFile {
+  Id: number;
+  FileName: string;
+  FilePath: string;
+  MimeType: string;
+  UploadedAt: string;
+}
 
 const ProductDetail = () => {
   const [product, setProduct] = useState<ProductDetail | null>(null);
@@ -44,66 +50,74 @@ const ProductDetail = () => {
   const [productImage, setProductImage] = useState<string | null>(null);
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [specFiles, setSpecFiles] = useState<SpecFile[]>([]);
+  const [specFile, setSpecFile] = useState<SpecFile | null>(null); // Tambahkan state
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
   const router = useRouter();
   const { id } = router.query;
 
-  const mmToInch = (mm: number) => (mm / 25.4).toFixed(2);
-  const psiToBar = (psi: number) => (psi * 0.0689476).toFixed(0);
+  const mmToInch = (mm: number | null) =>
+    mm != null ? (mm / 25.4).toFixed(2) : '-';
+  const psiToBar = (psi: number | null) =>
+    psi != null ? (psi * 0.0689476).toFixed(0) : '-';
 
   useEffect(() => {
-    // Cek login setiap kali halaman di-mount
     setIsLoggedIn(!!sessionStorage.getItem('userToken'));
   }, []);
 
   useEffect(() => {
+    if (!id) return;
+
     const fetchProductDetail = async () => {
       try {
-        if (!id) return;
         const response = await fetch(`/api/dealer/dealer/product/detail/product/${id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id }),
         });
-
         if (!response.ok) throw new Error('Failed to fetch product details.');
-
         const data = await response.json();
         setProduct(data.data);
+
+        // Selalu fetch PDF specFile apapun kondisi tabel
+        await fetchSpecFiles(data.data.Id);
+
       } catch (error) {
-        console.error('Error fetching product detail:', error);
         setError('Failed to load product detail.');
       }
     };
 
-
-    // Di dalam useEffect fetchProductImage
     const fetchProductImage = async () => {
       try {
-        if (!id) return;
-
         const response = await fetch(`/api/dealer/dealer/product/detail/image/${id}`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         });
-
-        // ✅ Jangan tampilkan error kalau gagal
-        if (!response.ok) {
-          console.warn('Tidak ada gambar tersedia untuk produk ini.');
-          return; // Keluar diam-diam
-        }
-
+        if (!response.ok) return;
         const data = await response.json();
         const firstImageUrl = data.data[0]?.ImageUrl
           ? getImageUrl(data.data[0].ImageUrl)
           : null;
-
         setProductImage(firstImageUrl);
-      } catch (error) {
-        console.warn('Error mengambil gambar produk:', error);
-        // Jangan set error apapun
+      } catch { }
+    };
+    const fetchSpecFiles = async (productId: number) => {
+      try {
+        const apiUrl = getImageUrl('api/dealer/dealer/product/detail/specification/files');
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ProductId: productId }),
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        setSpecFile(data.file || null);
+        // DEBUG LOG, pastikan response benar
+        console.log("fetchSpecFiles response:", data);
+      } catch (e) {
+        console.error("fetchSpecFiles error:", e);
       }
     };
-
 
     fetchProductDetail();
     fetchProductImage();
@@ -112,10 +126,27 @@ const ProductDetail = () => {
   if (error) return <p className="text-red-500">{error}</p>;
   if (!product) return <p>Loading...</p>;
 
+  // DEBUG: cek isi specFile
+
+
+  let previewFile: SpecFile | null = null;
+  if (showPdfPreview && specFile) {
+    previewFile = specFile;
+  }
+  const hasValidPartNumber = (pnList: PartNumberDetail[]) =>
+    pnList.some(
+      p =>
+        p.Dash !== null ||
+        p.InnerDiameter !== null ||
+        p.OuterDiameter !== null ||
+        p.WorkingPressure !== null ||
+        p.BurstingPressure !== null ||
+        p.BendingRadius !== null ||
+        p.HoseWeight !== null
+    );
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 ">
         <div className="grid md:grid-cols-2 gap-8 mb-12 mt-12">
           {/* Product Image Section */}
@@ -143,13 +174,10 @@ const ProductDetail = () => {
               )}
               <h1 className="text-4xl font-bold text-gray-900">{product.Name}</h1>
             </div>
-
             <div
               className="prose prose-sm max-w-none text-gray-700"
               dangerouslySetInnerHTML={{ __html: product.Description }}
             />
-
-
             <div className="mt-8">
               {isLoggedIn && (
                 <button
@@ -160,65 +188,93 @@ const ProductDetail = () => {
                 </button>
               )}
             </div>
-
           </div>
         </div>
 
-        {/* Specifications Table */}
-        {/* Specifications Table */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+        {/* Specifications Table / PDF Preview */}
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden mt-8">
           <h2 className="text-2xl font-semibold bg-gray-800 text-white px-6 py-4">
             Technical Specifications
           </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs md:text-sm">
-              <thead className="bg-yellow-300">
-                <tr>
-                  <th className="px-4 py-2 border text-black" rowSpan={2}>Part Number</th>
-                  <th className="px-2 py-2 border text-black" rowSpan={2}>dash</th>
-                  <th className="px-2 py-2 border text-black" colSpan={2}>I.D.</th>
-                  <th className="px-2 py-2 border text-black" rowSpan={2}>O.D.<br />(mm)</th>
-                  <th className="px-2 py-2 border text-black" colSpan={2}>Max Working Pressure</th>
-                  <th className="px-2 py-2 border text-black" colSpan={2}>Min Burst Pressure</th>
-                  <th className="px-2 py-2 border text-black" colSpan={2}>Min Bend Radius</th>
-                  <th className="px-2 py-2 border text-black" rowSpan={2}>Hose Weight<br />(m/kg)</th>
-                </tr>
-                <tr>
-                  <th className="px-2 py-2 border text-black">inch</th>
-                  <th className="px-2 py-2 border text-black">mm</th>
-                  <th className="px-2 py-2 border text-black">psi</th>
-                  <th className="px-2 py-2 border text-black">bar</th>
-                  <th className="px-2 py-2 border text-black">psi</th>
-                  <th className="px-2 py-2 border text-black">bar</th>
-                  <th className="px-2 py-2 border text-black">inch</th>
-                  <th className="px-2 py-2 border text-black">mm</th>
-                </tr>
-              </thead>
-              <tbody>
-                {([...product.PartNumber].sort((a, b) =>
-                  a.Name.localeCompare(b.Name, 'en', { numeric: true })
-                )).map((part) => (
-                  <tr key={part.Id} className="hover:bg-yellow-50">
-                    <td className="px-4 py-2 border font-medium text-black">{part.Name}</td>
-                    <td className="px-2 py-2 border text-center text-black">{part.Dash}</td>
-                    <td className="px-2 py-2 border text-center text-black">{mmToInch(part.InnerDiameter)}</td>
-                    <td className="px-2 py-2 border text-center text-black">{part.InnerDiameter}</td>
-                    <td className="px-2 py-2 border text-center text-black">{part.OuterDiameter}</td>
-                    <td className="px-2 py-2 border text-center text-black">{part.WorkingPressure}</td>
-                    <td className="px-2 py-2 border text-center text-black">{psiToBar(part.WorkingPressure)}</td>
-                    <td className="px-2 py-2 border text-center text-black">{part.BurstingPressure}</td>
-                    <td className="px-2 py-2 border text-center text-black">{psiToBar(part.BurstingPressure)}</td>
-                    <td className="px-2 py-2 border text-center text-black">{mmToInch(part.BendingRadius)}</td>
-                    <td className="px-2 py-2 border text-center text-black">{part.BendingRadius}</td>
-                    <td className="px-2 py-2 border text-center text-black">{part.HoseWeight}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="py-8 px-6 space-y-8">
+            {/* --- TABEL: Hanya tampil jika ada partnumber valid --- */}
+            {product.PartNumber && hasValidPartNumber(product.PartNumber) && (
+              <div className="w-full overflow-x-auto">
+                <table className="w-full text-xs md:text-sm">
+                  <thead className="bg-yellow-300">
+                    <tr>
+                      <th className="px-4 py-2 border text-black" rowSpan={2}>Part Number</th>
+                      <th className="px-2 py-2 border text-black" rowSpan={2}>dash</th>
+                      <th className="px-2 py-2 border text-black" colSpan={2}>I.D.</th>
+                      <th className="px-2 py-2 border text-black" rowSpan={2}>O.D.<br />(mm)</th>
+                      <th className="px-2 py-2 border text-black" colSpan={2}>Max Working Pressure</th>
+                      <th className="px-2 py-2 border text-black" colSpan={2}>Min Burst Pressure</th>
+                      <th className="px-2 py-2 border text-black" colSpan={2}>Min Bend Radius</th>
+                      <th className="px-2 py-2 border text-black" rowSpan={2}>Hose Weight<br />(m/kg)</th>
+                    </tr>
+                    <tr>
+                      <th className="px-2 py-2 border text-black">inch</th>
+                      <th className="px-2 py-2 border text-black">mm</th>
+                      <th className="px-2 py-2 border text-black">psi</th>
+                      <th className="px-2 py-2 border text-black">bar</th>
+                      <th className="px-2 py-2 border text-black">psi</th>
+                      <th className="px-2 py-2 border text-black">bar</th>
+                      <th className="px-2 py-2 border text-black">inch</th>
+                      <th className="px-2 py-2 border text-black">mm</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {([...product.PartNumber].sort((a, b) =>
+                      a.Name.localeCompare(b.Name, 'en', { numeric: true })
+                    )).map((part) => (
+                      <tr key={part.Id} className="hover:bg-yellow-50">
+                        <td className="px-4 py-2 border font-medium text-black">{part.Name}</td>
+                        <td className="px-2 py-2 border text-center text-black">{part.Dash ?? '-'}</td>
+                        <td className="px-2 py-2 border text-center text-black">{mmToInch(part.InnerDiameter)}</td>
+                        <td className="px-2 py-2 border text-center text-black">{part.InnerDiameter ?? '-'}</td>
+                        <td className="px-2 py-2 border text-center text-black">{part.OuterDiameter ?? '-'}</td>
+                        <td className="px-2 py-2 border text-center text-black">{part.WorkingPressure ?? '-'}</td>
+                        <td className="px-2 py-2 border text-center text-black">{psiToBar(part.WorkingPressure)}</td>
+                        <td className="px-2 py-2 border text-center text-black">{part.BurstingPressure ?? '-'}</td>
+                        <td className="px-2 py-2 border text-center text-black">{psiToBar(part.BurstingPressure)}</td>
+                        <td className="px-2 py-2 border text-center text-black">{mmToInch(part.BendingRadius)}</td>
+                        <td className="px-2 py-2 border text-center text-black">{part.BendingRadius ?? '-'}</td>
+                        <td className="px-2 py-2 border text-center text-black">{part.HoseWeight ?? '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* --- PDF Preview: selalu render jika ada file PDF --- */}
+            {specFile && (
+              <div className="w-full flex justify-center">
+                {specFile.MimeType === 'application/pdf' ? (
+                  <PdfPreview fileUrl={getImageUrl(specFile.FilePath)} />
+                ) : (
+                  // Tampilkan image jika tipe file gambar
+                  specFile.MimeType.startsWith('image/') && (
+                    <img
+                      src={getImageUrl(specFile.FilePath)}
+                      alt={specFile.FileName}
+                      style={{
+                        width: '100%',
+                        maxWidth: 900,
+                        height: 'auto',
+                        objectFit: 'contain',
+                        borderRadius: 12,
+                        boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
+                        background: "#fff",
+                        display: 'block',
+                      }}
+                    />
+                  )
+                )}
+              </div>
+            )}
           </div>
         </div>
-
-
 
         {/* Popup Modal */}
         {isPopupOpen && (
@@ -234,7 +290,6 @@ const ProductDetail = () => {
                   ✕
                 </button>
               </div>
-
               {/* Scrollable Content */}
               <div className="flex-1 overflow-y-auto p-6">
                 <PopupChoose
@@ -244,7 +299,6 @@ const ProductDetail = () => {
               </div>
             </div>
           </div>
-
         )}
       </main>
     </div>

@@ -3,6 +3,8 @@ import { PrismaClient } from "@prisma/client";
 import multiparty from "multiparty";
 import fs from "fs";
 import path from "path";
+const { cropAndResizePdfNode } = require('../../../utils/pdfCropA4');
+
 
 const prisma = new PrismaClient();
 
@@ -44,23 +46,56 @@ class ProductSpecification {
         return;
       }
 
-      // Ambil semua file yang dikirim (boleh banyak, bisa field name `file` atau lain, tapi direkomendasikan: file)
+      // Ambil semua file yg diupload
       const fileField = files.file || [];
       if (!fileField.length) {
         res.status(400).json({ message: "No file uploaded. Use field name 'file'." });
         return;
       }
 
-      const savedFiles: any[] = [];
-      for (const file of fileField) {
-        // Simpan file asli (semua jenis file didukung)
-        const originalFileName = file.originalFilename;
-        const ext = path.extname(originalFileName).toLowerCase();
-        const fileName = `productspec_${productIdNum}_${Date.now()}_${Math.round(Math.random()*100000)}${ext}`;
-        const destPath = path.join(SPEC_DIR, fileName);
-        fs.renameSync(file.path, destPath);
+      // 1. Cari semua spesifikasi aktif product ini, hapus file fisik & soft delete database
+      const prevSpecs = await prisma.productSpecificationFile.findMany({
+        where: { ProductId: productIdNum, DeletedAt: null }
+      });
+      for (const prev of prevSpecs) {
+        const prevPath = path.join(SPEC_DIR, prev.FileName);
+        if (fs.existsSync(prevPath)) {
+          try { fs.unlinkSync(prevPath); } catch { }
+        }
+        await prisma.productSpecificationFile.update({
+          where: { Id: prev.Id },
+          data: { DeletedAt: new Date() }
+        });
+      }
 
-        const mimeType = file.headers["content-type"] || "application/octet-stream";
+      // 2. Proses upload file baru (hanya simpan satu file saja)
+      const savedFiles: any[] = [];
+      // Hanya upload 1 file (ambil yang pertama saja, atau sesuai logika)
+      const uploadFile = fileField[0];
+      if (uploadFile) {
+        const originalFileName = uploadFile.originalFilename;
+        const ext = path.extname(originalFileName).toLowerCase();
+        const fileName = `productspec_${productIdNum}_${Date.now()}_${Math.round(Math.random() * 100000)}${ext}`;
+        const destPath = path.join(SPEC_DIR, fileName);
+
+        if (ext === ".pdf") {
+          // Simpan temp dulu
+          const tmpPath = destPath.replace(ext, "_original.pdf");
+          fs.renameSync(uploadFile.path, tmpPath);
+
+          try {
+            await cropAndResizePdfNode(tmpPath, destPath);
+            if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+          } catch (e) {
+            if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+            res.status(500).json({ message: "PDF crop/resize error", error: (e instanceof Error ? e.message : String(e)) });
+            return;
+          }
+        } else {
+          fs.renameSync(uploadFile.path, destPath);
+        }
+
+        const mimeType = uploadFile.headers["content-type"] || "application/octet-stream";
         const saved = await prisma.productSpecificationFile.create({
           data: {
             ProductId: productIdNum,
@@ -196,7 +231,7 @@ class ProductSpecification {
       }
       const fullPath = path.join(SPEC_DIR, file.FileName);
       if (fs.existsSync(fullPath)) {
-        try { fs.unlinkSync(fullPath); } catch {}
+        try { fs.unlinkSync(fullPath); } catch { }
       }
       await prisma.productSpecificationFile.update({
         where: { Id: file.Id },

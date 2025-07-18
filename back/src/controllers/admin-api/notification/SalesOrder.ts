@@ -122,13 +122,14 @@ export const markAllNotificationsAsRead = async (req: Request, res: Response) =>
   try {
     const admin = req.admin || req.user;
     if (!admin || !admin.Id) {
-      return res.status(401).json({ message: "Unauthorized" });
+      res.status(401).json({ message: "Unauthorized" }); // Tidak pakai return di depan
+      return; // biar handler stop
     }
     await prisma.adminNotification.updateMany({
       where: { AdminId: admin.Id, IsRead: false, DeletedAt: null },
       data: { IsRead: true },
     });
-    res.json({ message: "All notifications marked as read" });
+    res.json({ message: "All notifications marked as read" }); // Tidak pakai return
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
   }

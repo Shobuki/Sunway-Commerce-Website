@@ -54,6 +54,12 @@ app.use('/images/product/productimage', express.static(path.join(__dirname, '../
 //middleware item code image
 app.use('/images/product/itemcode/itemcodeimage', express.static(path.join(__dirname, '../public/admin/images/product/itemcodeimage')));
 
+//middlware product specification file
+app.use(
+  '/images/product/productspecification',
+  express.static(path.join(__dirname, '../public/admin/images/product/productspecification'))
+);
+
 //middleware profile image admin
 app.use('/images/profile', express.static(path.join(__dirname, '../public/admin/images/profile')));
 

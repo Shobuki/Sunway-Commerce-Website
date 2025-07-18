@@ -4,6 +4,8 @@ import { AccessProvider, useAccess } from "../contexts/AccessContext";
 import FailedAccess from "../components/notification/FailedAccess";
 import { ErrorProvider } from "../contexts/ErrorContext";
 import GlobalErrorPopup from "../components/notification/GlobalErrorPopup";
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
 
 // Handler global: tampilkan FailedAccess jika state failed
 function AccessHandler({ children }) {

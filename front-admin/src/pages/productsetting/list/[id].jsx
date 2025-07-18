@@ -5,6 +5,8 @@ import { hasMenuAccess, hasFeatureAccess } from "@/utils/access";
 import PartNumberTable from "../detail/PartNumberTable"; // This component will likely need its own adjustments
 import ProductEditModal from "../Modal/ProductEditModal"; // Pastikan path sesuai
 import { getImageUrl } from "../../../utils/getImageUrl"
+const PdfPreview = dynamic(() => import('../../../components/PdfPreview'), { ssr: false });
+import dynamic from 'next/dynamic';
 
 const ProductDetail = () => {
   const router = useRouter();
@@ -90,13 +92,31 @@ const ProductDetail = () => {
     if (!id) return;
     try {
       const res = await axios.post("/api/admin/admin/products/specification-files/product", { ProductId: id });
-      setSpecFiles(res.data.files || []);
+      console.log("spec files response:", res.data);
+      // Perbaiki di sini:
+      let files = [];
+      if (Array.isArray(res.data)) {
+        files = res.data;
+      } else if (Array.isArray(res.data.files)) {
+        files = res.data.files;
+      } else if (Array.isArray(res.data.data)) {
+        files = res.data.data;
+      } else if (res.data && typeof res.data === "object" && res.data.Id) {
+        // Kalau respons adalah single object
+        files = [res.data];
+      }
+      setSpecFiles(files);
     } catch (err) {
       setSpecFiles([]);
     }
   };
 
   const handleSpecUpload = async (event) => {
+    console.log("HANDLE SPEC UPLOAD CALLED");
+    if (!id) {
+      alert("ID produk tidak ditemukan");
+      return;
+    }
     const files = event.target.files;
     if (!files || !files.length) return;
     const formData = new FormData();
@@ -106,12 +126,12 @@ const ProductDetail = () => {
     }
     try {
       setSpecUploading(true);
-      await axios.post("/api/admin/admin/products/specification-files/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      await axios.post("/api/admin/admin/products/specification-files/upload", formData);
       fetchSpecificationFiles();
     } catch (err) {
-      //
+      // Debug di sini!
+      console.log("UPLOAD ERROR:", err?.response?.data, err);
+      alert("Failed to upload file");
     } finally {
       setSpecUploading(false);
     }
@@ -191,33 +211,46 @@ const ProductDetail = () => {
         />
       </div>
 
-
-      {/* Upload Image */}
-      <div className="mt-5">
+      <div className="mt-4">
         {hasFeatureAccess(menuAccess, "editproduct") && (
-          <label className="bg-blue-500 text-white px-5 py-2.5 rounded-md cursor-pointer hover:bg-blue-600 transition-all font-semibold inline-flex items-center gap-2"> {/* Increased padding, added inline-flex and gap for icon */}
-            {uploading ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Uploading...
-              </>
-            ) : (
-              <>
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd"></path></svg>
-                Upload Image
-              </>
-            )}
-            <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
-          </label>
+          <button
+            className="bg-yellow-500 text-white px-5 py-2.5 rounded-md hover:bg-yellow-600 transition-all font-semibold inline-flex items-center gap-2" // Increased padding, added inline-flex and gap for icon
+            onClick={() => setIsEditModalOpen(true)}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.536-6.536a2 2 0 112.828 2.828L11.828 15.828a4 4 0 01-2.828 1.172H7v-2a4 4 0 011.172-2.828z"></path></svg>
+            Edit Product
+          </button>
         )}
       </div>
+
+
+
 
       {/* Image Gallery */}
       <div className="mt-6">
         <h2 className="text-xl font-semibold mb-3">Product Images</h2>
+        {/* Upload Image */}
+        <div className="mt-5">
+          {hasFeatureAccess(menuAccess, "editproduct") && (
+            <label className="bg-blue-500 text-white px-5 py-2.5 rounded-md cursor-pointer hover:bg-blue-600 transition-all font-semibold inline-flex items-center gap-2"> {/* Increased padding, added inline-flex and gap for icon */}
+              {uploading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd"></path></svg>
+                  Upload Image
+                </>
+              )}
+              <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
+            </label>
+          )}
+        </div>
         {images.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {images.map((image) => (
@@ -244,6 +277,7 @@ const ProductDetail = () => {
       </div>
 
       <div className="mt-8">
+        {/* PDF Preview Besar, ambil file PDF pertama */}
         <h2 className="text-xl font-semibold mb-3">Product Specification Files</h2>
         {/* UPLOAD BUTTON */}
         {hasFeatureAccess(menuAccess, "editproduct") && (
@@ -281,7 +315,19 @@ const ProductDetail = () => {
               <tbody>
                 {specFiles.map((f) => (
                   <tr key={f.Id}>
-                    <td className="py-2 px-3 border-b">{f.FileName}</td>
+                    <td className="py-2 px-3 border-b">
+                      {f.MimeType.startsWith("image/") ? (
+                        <img
+                          src={getImageUrl(f.FilePath)}
+                          alt={f.FileName}
+                          style={{ maxWidth: 80, maxHeight: 80, borderRadius: 6 }}
+                          className="shadow"
+                        />
+                      ) : (
+                        f.FileName
+                      )}
+                    </td>
+
                     <td className="py-2 px-3 border-b">{f.MimeType}</td>
                     <td className="py-2 px-3 border-b">{new Date(f.UploadedAt).toLocaleString()}</td>
                     <td className="py-2 px-3 border-b flex gap-2">
@@ -310,18 +356,10 @@ const ProductDetail = () => {
         )}
       </div>
 
+      {specFiles.some(f => f.MimeType === "application/pdf") && (
+        <PdfPreview fileUrl={getImageUrl(specFiles.find(f => f.MimeType === "application/pdf").FilePath)} />
+      )}
 
-      <div className="mt-4">
-        {hasFeatureAccess(menuAccess, "editproduct") && (
-          <button
-            className="bg-yellow-500 text-white px-5 py-2.5 rounded-md hover:bg-yellow-600 transition-all font-semibold inline-flex items-center gap-2" // Increased padding, added inline-flex and gap for icon
-            onClick={() => setIsEditModalOpen(true)}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.536-6.536a2 2 0 112.828 2.828L11.828 15.828a4 4 0 01-2.828 1.172H7v-2a4 4 0 011.172-2.828z"></path></svg>
-            Edit Product
-          </button>
-        )}
-      </div>
 
 
       {/* Full-Width Part Number Table */}
