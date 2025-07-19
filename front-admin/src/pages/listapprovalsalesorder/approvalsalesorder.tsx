@@ -66,6 +66,7 @@ interface SalesOrderDetail {
   Warehouse?: number | null; // Tambahkan ini jika perlu
   WarehouseId?: number | null;
   warehouseOptions?: { Id: number; Name: string; QtyOnHand: number }[];
+  _priceInput?: string;
 }
 
 interface EmailRecipient {
@@ -811,20 +812,20 @@ const ApprovalSalesOrder: React.FC = () => {
   console.log('Filtered orders:', filteredOrders);
 
   const sortedOrders = [...filteredOrders]
-  .sort((a, b) => {
-    // Urut tanggal dulu
-    const dateA = new Date(a.CreatedAt).getTime();
-    const dateB = new Date(b.CreatedAt).getTime();
-    if (dateA !== dateB) {
-      return sortByNewest ? dateB - dateA : dateA - dateB;
-    }
-    // Kalau tanggal sama, urut dealer (sesuai preferensi)
-    const nameA = a.Dealer.CompanyName.toLowerCase();
-    const nameB = b.Dealer.CompanyName.toLowerCase();
-    return sortDealerAsc
-      ? nameA.localeCompare(nameB)
-      : nameB.localeCompare(nameA);
-  });
+    .sort((a, b) => {
+      // Urut tanggal dulu
+      const dateA = new Date(a.CreatedAt).getTime();
+      const dateB = new Date(b.CreatedAt).getTime();
+      if (dateA !== dateB) {
+        return sortByNewest ? dateB - dateA : dateA - dateB;
+      }
+      // Kalau tanggal sama, urut dealer (sesuai preferensi)
+      const nameA = a.Dealer.CompanyName.toLowerCase();
+      const nameB = b.Dealer.CompanyName.toLowerCase();
+      return sortDealerAsc
+        ? nameA.localeCompare(nameB)
+        : nameB.localeCompare(nameA);
+    });
 
   {
     approveMessage && (
@@ -843,7 +844,7 @@ const ApprovalSalesOrder: React.FC = () => {
   if (!menuAccess) return null; // Sudah redirect
 
   return (
-    <div className="p-5 ml-60 max-w-6xl mx-auto bg-white rounded-lg shadow-md overflow-hidden">
+    <div className="p-3 md:p-5 md:ml-60 max-w-full md:max-w-6xl mx-auto bg-white rounded-lg shadow-md overflow-hidden">
       <h2 className="text-2xl font-bold mb-5">Approval Sales Orders</h2>
       {canListRecipient && (
         <button
@@ -863,14 +864,14 @@ const ApprovalSalesOrder: React.FC = () => {
       )}
 
 
-      <div className="flex gap-4 mb-4">
+      <div className="flex flex-col md:flex-row gap-2 md:gap-4 mb-4">
         {/* Search Dealer */}
         <input
           type="text"
           placeholder="Search by Dealer Name"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border px-4 py-2 rounded w-1/3"
+          className="border px-4 py-2 rounded w-full md:w-1/3"
         />
 
         {/* Filter Status */}
@@ -916,41 +917,43 @@ const ApprovalSalesOrder: React.FC = () => {
       </div>
 
 
-      <table className="w-full border-collapse border border-gray-300 text-left">
-        <thead>
-          <tr className="bg-gray-100">
+      <div className="overflow-x-auto">
+        <table className="min-w-[700px] w-full border-collapse border border-gray-300 text-left">
+          <thead>
+            <tr className="bg-gray-100">
 
-            <th className="border border-gray-300 px-4 py-2">Dealer Name</th>
-            <th className="border border-gray-300 px-4 py-2">Region</th>
-            <th className="border border-gray-300 px-4 py-2">Transaction Date</th>
-            <th className="border border-gray-300 px-4 py-2">Status</th>
-            <th className="border border-gray-300 px-4 py-2">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sortedOrders.map((order) => (
-
-            <tr key={order.Id}>
-              <td className="border border-gray-300 px-4 py-2">{order.Dealer.CompanyName}</td>
-              <td className="border border-gray-300 px-4 py-2">{order.Dealer.Region}</td>
-              <td className="border border-gray-300 px-4 py-2">{order.CreatedAt}</td>
-              <td className="border border-gray-300 px-4 py-2">{order.Status}</td>
-              <td className="border border-gray-300 px-4 py-2">
-                <button
-                  className="bg-blue-500 px-3 py-1 rounded text-white"
-                  onClick={() => handleReview(order)}
-                >
-                  Review
-                </button>
-              </td>
+              <th className="border border-gray-300 px-4 py-2">Dealer Name</th>
+              <th className="border border-gray-300 px-4 py-2">Region</th>
+              <th className="border border-gray-300 px-4 py-2">Transaction Date</th>
+              <th className="border border-gray-300 px-4 py-2">Status</th>
+              <th className="border border-gray-300 px-4 py-2">Action</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {sortedOrders.map((order) => (
+
+              <tr key={order.Id}>
+                <td className="border border-gray-300 px-4 py-2">{order.Dealer.CompanyName}</td>
+                <td className="border border-gray-300 px-4 py-2">{order.Dealer.Region}</td>
+                <td className="border border-gray-300 px-4 py-2">{order.CreatedAt}</td>
+                <td className="border border-gray-300 px-4 py-2">{order.Status}</td>
+                <td className="border border-gray-300 px-4 py-2">
+                  <button
+                    className="bg-blue-500 px-3 py-1 rounded text-white"
+                    onClick={() => handleReview(order)}
+                  >
+                    Review
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {showModal && selectedOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[100]"> {/* Tambah z-index lebih tinggi jika perlu */}
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-[95vw] sm:max-w-[90vw] md:max-w-[80vw] lg:max-w-[75vw] xl:max-w-[70vw] max-h-[90vh] overflow-y-auto"> {/* Sedikit perlebar max-w agar lebih nyaman */}
+          <div className="bg-white p-3 md:p-6 rounded-lg shadow-lg w-full max-w-[98vw] md:max-w-[80vw] max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4">Review Order: {selectedOrder.SalesOrderNumber}</h3>
 
             {/* Bagian Info Order (SalesOrderNumber, CustomerPoNumber, dll.) tetap sama */}
@@ -1089,191 +1092,335 @@ const ApprovalSalesOrder: React.FC = () => {
                 <h4 className="font-bold text-lg mb-2">Item Details</h4>
                 <div className="overflow-x-auto">
                   {/* Tambahkan table-fixed dan tentukan lebar kolom pada th jika perlu */}
-                  <table className="min-w-full border border-gray-300 table-fixed">
-                    <colgroup>
-                      <col style={{ width: '35%' }} /> {/* Item Code */}
-                      <col style={{ width: '15%' }} /> {/* Quantity */}
-                      <col style={{ width: '20%' }} /> {/* Price */}
-                      <col style={{ width: '20%' }} /> {/* Warehouse*/}
-                      <col style={{ width: '20%' }} /> {/* Final Price */}
-                      <col style={{ width: '10%' }} /> {/* Action */}
-                    </colgroup>
-                    <thead className="bg-gray-100 text-sm text-gray-700">
-                      <tr>
-                        <th className="border px-3 py-2 text-left">Item Code</th>
-                        <th className="border px-3 py-2 text-left">Quantity</th>
-                        <th className="border px-3 py-2 text-left">Price</th>
-                        <th className="border px-3 py-2 text-left">Warehouse</th>
-                        <th className="border px-3 py-2 text-left">Final Price</th>
-                        <th className="border px-3 py-2 text-left">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {updateDetails.map((detail, index) => (
-                        // Gunakan index sebagai key jika Id tidak unik atau belum ada saat item baru ditambahkan
-                        <tr key={detail.Id || `new-${index}`}>
-                          <td className="border px-2 py-1 align-top"> {/* align-top agar dropdown tidak mendorong konten lain ke bawah */}
-                            <div className="relative">
-                              <button
-                                className="w-full text-left border px-2 py-1 rounded bg-gray-50 hover:bg-gray-100 truncate" // truncate agar teks panjang tidak merusak layout
-                                onClick={() => {
-                                  const toggles = [...dropdownOpen];
-                                  toggles[index] = !toggles[index];
-                                  setDropdownOpen(toggles);
-                                  if (toggles[index] && (!itemCodeOptions[index] || itemCodeOptions[index].length === 0)) { // Hanya fetch jika dropdown dibuka & options kosong
-                                    fetchItemCodes(detail.ItemCodeId, "", index);
+                  <div className="overflow-x-auto">
+                    <table className="min-w-[600px] w-full border border-gray-300 table-fixed">
+                      <colgroup>
+                        <col style={{ width: '35%' }} /> {/* Item Code */}
+                        <col style={{ width: '15%' }} /> {/* Quantity */}
+                        <col style={{ width: '20%' }} /> {/* Price */}
+                        <col style={{ width: '20%' }} /> {/* Warehouse*/}
+                        <col style={{ width: '20%' }} /> {/* Final Price */}
+                        <col style={{ width: '10%' }} /> {/* Action */}
+                      </colgroup>
+                      <thead className="bg-gray-100 text-sm text-gray-700">
+                        <tr>
+                          <th className="border px-3 py-2 text-left">Item Code</th>
+                          <th className="border px-3 py-2 text-left">Quantity</th>
+                          <th className="border px-3 py-2 text-left">Price</th>
+                          <th className="border px-3 py-2 text-left">Warehouse</th>
+                          <th className="border px-3 py-2 text-left">Final Price (inc tax)</th>
+                          <th className="border px-3 py-2 text-left">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {updateDetails.map((detail, index) => (
+                          // Gunakan index sebagai key jika Id tidak unik atau belum ada saat item baru ditambahkan
+                          <tr key={detail.Id || `new-${index}`}>
+                            <td className="border px-2 py-1 align-top"> {/* align-top agar dropdown tidak mendorong konten lain ke bawah */}
+                              <div className="relative">
+                                <button
+                                  className="w-full text-left border px-2 py-1 rounded bg-gray-50 hover:bg-gray-100 truncate" // truncate agar teks panjang tidak merusak layout
+                                  onClick={() => {
+                                    const toggles = [...dropdownOpen];
+                                    toggles[index] = !toggles[index];
+                                    setDropdownOpen(toggles);
+                                    if (toggles[index] && (!itemCodeOptions[index] || itemCodeOptions[index].length === 0)) { // Hanya fetch jika dropdown dibuka & options kosong
+                                      fetchItemCodes(detail.ItemCodeId, "", index);
+                                    }
+                                  }}
+                                >
+                                  {detail.ItemCode?.Name || "Pilih Item Code"}
+                                </button>
+                                {dropdownOpen[index] && (
+                                  <div className="absolute bg-white border mt-1 rounded shadow-lg z-[60] w-full max-h-60 overflow-y-auto"> {/* max-h dan overflow-y */}
+                                    <input
+                                      type="text"
+                                      className="w-full p-2 border-b sticky top-0 bg-white z-10" // sticky search bar
+                                      placeholder="Cari Item Code..."
+                                      onClick={(e) => e.stopPropagation()} // Mencegah dropdown tertutup saat klik input
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        fetchItemCodes(0, e.target.value, index); // itemcodeId 0 untuk search by query
+                                      }}
+                                    />
+                                    {itemCodeOptions[index]?.length > 0 ? (
+                                      itemCodeOptions[index]?.map((item) => (
+                                        <div
+                                          key={item.Id}
+                                          className="p-2 hover:bg-blue-100 cursor-pointer truncate"
+                                          onClick={() => {
+                                            const updated = [...updateDetails];
+                                            updated[index].ItemCodeId = item.Id;
+                                            updated[index].ItemCode = {
+                                              Id: item.Id,
+                                              Name: item.Name,
+                                              PartNumberId: item.PartNumberId ?? 0,
+                                            };
+                                            // Opsional: reset harga atau ambil harga default item baru
+                                            // updated[index].Price = item.DefaultPrice || 0; 
+                                            // hitung ulang FinalPrice
+                                            const qty = updated[index].Quantity;
+                                            const price = updated[index].Price; // atau item.DefaultPrice
+                                            updated[index].FinalPrice = forceApplyTax && activeTax
+                                              ? Math.round(qty * price * (1 + activeTax.Percentage / 100))
+                                              : qty * price;
+
+                                            setUpdateDetails(updated);
+                                            const toggles = [...dropdownOpen];
+                                            toggles[index] = false;
+                                            setDropdownOpen(toggles);
+                                          }}
+                                        >
+                                          {item.Name}
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <div className="p-2 text-gray-500">Tidak ada item.</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="border px-2 py-1 align-top">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                className="w-full border px-2 py-1 rounded focus:ring-indigo-500 focus:border-indigo-500"
+                                value={detail.Quantity === 0 ? "" : detail.Quantity.toString()}
+                                onChange={(e) => {
+                                  // Hanya angka diperbolehkan
+                                  const val = e.target.value.replace(/[^0-9]/g, "");
+                                  // Ubah state ke string dulu agar cursor nyaman
+                                  setUpdateDetails(prev => {
+                                    const updated = [...prev];
+                                    // Kosong = 0
+                                    updated[index] = {
+                                      ...updated[index],
+                                      Quantity: val === "" ? 0 : parseInt(val)
+                                    };
+                                    // Kalkulasi FinalPrice
+                                    const qty = val === "" ? 0 : parseInt(val);
+                                    const price = updated[index].Price;
+                                    updated[index].FinalPrice = forceApplyTax && activeTax
+                                      ? Math.round(qty * price * (1 + (activeTax?.Percentage || 0) / 100))
+                                      : qty * price;
+                                    return updated;
+                                  });
+                                }}
+                                onBlur={(e) => {
+                                  // Jika input kosong, balikin ke 1 atau 0 sesuai kebutuhan
+                                  if (e.target.value === "") {
+                                    setUpdateDetails(prev => {
+                                      const updated = [...prev];
+                                      updated[index] = { ...updated[index], Quantity: 1, FinalPrice: updated[index].Price };
+                                      return updated;
+                                    });
                                   }
                                 }}
+                              />
+                            </td>
+                            <td className="border px-2 py-1 align-top">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                pattern="^(\d+)?(\.\d*)?$"
+                                className="w-full border px-2 py-1 rounded focus:ring-indigo-500 focus:border-indigo-500"
+                                value={
+                                  // Jika kosong biar tetap string kosong, jika 0 dan belum ada ".", kosongkan juga (supaya 0 hilang saat edit)
+                                  (detail.Price === 0 && detail._priceInput !== "0." && detail._priceInput !== "0.0")
+                                    ? (detail._priceInput ?? "")
+                                    : (typeof detail._priceInput === "string" ? detail._priceInput : detail.Price)
+                                }
+                                onChange={e => {
+                                  let val = e.target.value;
+                                  // Hanya izinkan digit dan titik (validasi manual)
+                                  if (!/^(\d+)?(\.\d*)?$/.test(val) && val !== "") return;
+
+                                  setUpdateDetails(prev => {
+                                    const updated = [...prev];
+                                    // Update _priceInput untuk handle string input (supaya "0." dan "0.00" tetap valid)
+                                    updated[index] = {
+                                      ...updated[index],
+                                      _priceInput: val,
+                                      Price:
+                                        val === "" ? 0 // kalau kosong, biar tetap 0 di state
+                                          : val === "0." ? 0 // biar tetap "0." (nanti tetap di-input sebagai 0)
+                                            : val.endsWith(".") ? parseFloat(val) || 0 // biar "1." tetap bisa lanjut
+                                              : parseFloat(val) || 0,
+                                    };
+                                    // Kalkulasi FinalPrice
+                                    const qty = updated[index].Quantity;
+                                    const price =
+                                      val === "" || val === "0."
+                                        ? 0
+                                        : val.endsWith(".")
+                                          ? parseFloat(val) || 0
+                                          : parseFloat(val) || 0;
+
+                                    updated[index].FinalPrice = forceApplyTax && activeTax
+                                      ? Math.round(qty * price * (1 + (activeTax?.Percentage || 0) / 100))
+                                      : qty * price;
+
+                                    return updated;
+                                  });
+                                }}
+                                onBlur={e => {
+                                  // Hilangkan trailing titik saat blur (jadi "1." -> "1")
+                                  setUpdateDetails(prev => {
+                                    const updated = [...prev];
+                                    let val = e.target.value;
+                                    if (val.endsWith(".")) val = val.replace(/\.+$/, "");
+                                    updated[index] = {
+                                      ...updated[index],
+                                      _priceInput: val,
+                                      Price: val === "" ? 0 : parseFloat(val) || 0,
+                                    };
+                                    // Kalkulasi FinalPrice
+                                    const qty = updated[index].Quantity;
+                                    const price = val === "" ? 0 : parseFloat(val) || 0;
+                                    updated[index].FinalPrice = forceApplyTax && activeTax
+                                      ? Math.round(qty * price * (1 + (activeTax?.Percentage || 0) / 100))
+                                      : qty * price;
+                                    return updated;
+                                  });
+                                }}
+                              />
+                            </td>
+                            <td className="border px-2 py-1 align-top">
+                              <select
+                                className="w-full border px-2 py-1 rounded"
+                                value={selectedWarehouses[index] == null ? "" : selectedWarehouses[index]} // gunakan nullish coalescing untuk default ""
+                                onChange={e => {
+                                  const val = e.target.value ? parseInt(e.target.value) : null;
+                                  setSelectedWarehouses(prev => {
+                                    const upd = [...prev];
+                                    upd[index] = val;
+                                    return upd;
+                                  });
+                                }}
+
                               >
-                                {detail.ItemCode?.Name || "Pilih Item Code"}
-                              </button>
-                              {dropdownOpen[index] && (
-                                <div className="absolute bg-white border mt-1 rounded shadow-lg z-[60] w-full max-h-60 overflow-y-auto"> {/* max-h dan overflow-y */}
-                                  <input
-                                    type="text"
-                                    className="w-full p-2 border-b sticky top-0 bg-white z-10" // sticky search bar
-                                    placeholder="Cari Item Code..."
-                                    onClick={(e) => e.stopPropagation()} // Mencegah dropdown tertutup saat klik input
-                                    onChange={(e) => {
-                                      e.stopPropagation();
-                                      fetchItemCodes(0, e.target.value, index); // itemcodeId 0 untuk search by query
-                                    }}
-                                  />
-                                  {itemCodeOptions[index]?.length > 0 ? (
-                                    itemCodeOptions[index]?.map((item) => (
-                                      <div
-                                        key={item.Id}
-                                        className="p-2 hover:bg-blue-100 cursor-pointer truncate"
-                                        onClick={() => {
-                                          const updated = [...updateDetails];
-                                          updated[index].ItemCodeId = item.Id;
-                                          updated[index].ItemCode = {
-                                            Id: item.Id,
-                                            Name: item.Name,
-                                            PartNumberId: item.PartNumberId ?? 0,
-                                          };
-                                          // Opsional: reset harga atau ambil harga default item baru
-                                          // updated[index].Price = item.DefaultPrice || 0; 
-                                          // hitung ulang FinalPrice
-                                          const qty = updated[index].Quantity;
-                                          const price = updated[index].Price; // atau item.DefaultPrice
-                                          updated[index].FinalPrice = forceApplyTax && activeTax
-                                            ? Math.round(qty * price * (1 + activeTax.Percentage / 100))
-                                            : qty * price;
-
-                                          setUpdateDetails(updated);
-                                          const toggles = [...dropdownOpen];
-                                          toggles[index] = false;
-                                          setDropdownOpen(toggles);
-                                        }}
-                                      >
-                                        {item.Name}
-                                      </div>
-                                    ))
-                                  ) : (
-                                    <div className="p-2 text-gray-500">Tidak ada item.</div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="border px-2 py-1 align-top">
-                            <input
-                              type="number"
-                              min="1"
-                              className="w-full border px-2 py-1 rounded focus:ring-indigo-500 focus:border-indigo-500"
-                              value={detail.Quantity}
-                              onChange={(e) =>
-                                handleDetailChange(index, "Quantity", parseInt(e.target.value) || 1)
-                              }
-                            />
-                          </td>
-                          <td className="border px-2 py-1 align-top">
-                            <input
-                              type="number"
-                              min="0"
-                              className="w-full border px-2 py-1 rounded focus:ring-indigo-500 focus:border-indigo-500"
-                              value={detail.Price}
-                              onChange={(e) =>
-                                handleDetailChange(index, "Price", parseFloat(e.target.value) || 0)
-                              }
-                            />
-                          </td>
-                          <td className="border px-2 py-1 align-top">
-                            <select
-                              className="w-full border px-2 py-1 rounded"
-                              value={selectedWarehouses[index] == null ? "" : selectedWarehouses[index]} // gunakan nullish coalescing untuk default ""
-                              onChange={e => {
-                                const val = e.target.value ? parseInt(e.target.value) : null;
-                                setSelectedWarehouses(prev => {
-                                  const upd = [...prev];
-                                  upd[index] = val;
-                                  return upd;
-                                });
+                                <option value="">No Warehouse</option>
+                                {warehouseOptions[index]?.length > 0 &&
+                                  warehouseOptions[index].map(w => (
+                                    <option key={w.Id} value={w.Id}>
+                                      {w.Name} ({w.QtyOnHand})
+                                    </option>
+                                  ))}
+                              </select>
+                            </td>
+                            <td
+                              className="border px-2 py-1 bg-gray-50 text-gray-800 align-top"
+                              style={{
+                                maxWidth: 120, // px, sesuaikan lebar kolom sesuai kebutuhan
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
                               }}
-
+                              title={
+                                pricingSummary?.details?.[index]?.FinalPrice
+                                  ? pricingSummary.details[index].FinalPrice.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                  : (detail.FinalPrice || 0).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                              }
                             >
-                              <option value="">No Warehouse</option>
-                              {warehouseOptions[index]?.length > 0 &&
-                                warehouseOptions[index].map(w => (
-                                  <option key={w.Id} value={w.Id}>
-                                    {w.Name} ({w.QtyOnHand})
-                                  </option>
-                                ))}
-                            </select>
+                              Rp {
+                                pricingSummary?.details?.[index]?.FinalPrice
+                                  ? pricingSummary.details[index].FinalPrice.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                  : (detail.FinalPrice || 0).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                              }
+                            </td>
+                            <td className="border text-center align-middle">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItem(index)}
+                                className="text-red-600 hover:text-red-800 font-bold text-2xl leading-none w-10 h-10 flex items-center justify-center mx-auto"
+                                title="Remove Item"
+                              >
+                                &times;
+                              </button>
+                            </td>
+
+                          </tr>
+                        ))}
+                      </tbody>
+                      {/* Total Keseluruhan */}
+                      <tfoot>
+                        <tr>
+                          <td colSpan={4} className="text-right font-bold px-3 py-2 border">
+                            Subtotal (no tax):
                           </td>
-                          <td className="border px-2 py-1 bg-gray-50 text-gray-800 align-top">
-                            Rp {
-                              pricingSummary?.details?.[index]?.FinalPrice
-                                ? pricingSummary.details[index].FinalPrice.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                                : (detail.FinalPrice || 0).toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                          <td
+                            className="border px-3 py-2 text-gray-800"
+                            style={{
+                              maxWidth: 150, // ganti sesuai keperluan (120-180 px biasanya cukup)
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={
+                              pricingSummary
+                                ? pricingSummary.subtotal.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : "0,00"
                             }
+                          >
+                            Rp {pricingSummary
+                              ? pricingSummary.subtotal.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                              : 0}
                           </td>
-                          <td className="border text-center align-middle">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveItem(index)}
-                              className="text-red-600 hover:text-red-800 font-bold text-2xl leading-none w-10 h-10 flex items-center justify-center mx-auto"
-                              title="Remove Item"
-                            >
-                              &times;
-                            </button>
-                          </td>
-
+                          <td className="border"></td>
                         </tr>
-                      ))}
-                    </tbody>
-                    {/* Total Keseluruhan */}
-                    <tfoot>
-                      <tr>
-                        <td colSpan={4} className="text-right font-bold px-3 py-2 border">
-                          Subtotal:
-                        </td>
-                        <td className="border px-3 py-2 text-gray-800">
-                          Rp {pricingSummary ? pricingSummary.subtotal.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 0}
-                        </td>
-                        <td className="border"></td>
-                      </tr>
-                      <tr>
-                        <td colSpan={4} className="text-right font-bold px-3 py-2 border">
-                          Pajak ({pricingSummary?.activeTax?.Percentage ?? 0}%):
-                        </td>
-                        <td className="border px-3 py-2 text-gray-800">
-                          Rp {pricingSummary ? pricingSummary.totalTax.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 0}
-                        </td>
-                        <td className="border"></td>
-                      </tr>
-                      <tr>
-                        <td colSpan={4} className="text-right font-bold px-3 py-2 border bg-gray-100">
-                          Total Keseluruhan:
-                        </td>
-                        <td className="border px-3 py-2 bg-gray-100 font-bold text-green-700">
-                          Rp {pricingSummary ? pricingSummary.totalWithTax.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 0}
-                        </td>
-                        <td className="border bg-gray-100"></td>
-                      </tr>
-                    </tfoot>
-                  </table>
+                        <tr>
+                          <td colSpan={4} className="text-right font-bold px-3 py-2 border">
+                            Pajak ({pricingSummary?.activeTax?.Percentage ?? 0}%):
+                          </td>
+                          <td
+                            className="border px-3 py-2 text-gray-800"
+                            style={{
+                              maxWidth: 150,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={
+                              pricingSummary
+                                ? pricingSummary.totalTax.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : "0,00"
+                            }
+                          >
+                            Rp {pricingSummary
+                              ? pricingSummary.totalTax.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                              : 0}
+                          </td>
+                          <td className="border"></td>
+                        </tr>
+                        <tr>
+                          <td colSpan={4} className="text-right font-bold px-3 py-2 border bg-gray-100">
+                            Total:
+                          </td>
+                          <td
+                            className="border px-3 py-2 bg-gray-100 font-bold text-green-700"
+                            style={{
+                              maxWidth: 150,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={
+                              pricingSummary
+                                ? pricingSummary.totalWithTax.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : "0,00"
+                            }
+                          >
+                            Rp {pricingSummary
+                              ? pricingSummary.totalWithTax.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                              : 0}
+                          </td>
+                          <td className="border bg-gray-100"></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                   <button
                     onClick={handleAddItem}
                     className="mt-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition duration-150"
@@ -1285,7 +1432,7 @@ const ApprovalSalesOrder: React.FC = () => {
             </div>
 
             {/* Tombol Action (Approve, Update, Reject, Close) */}
-            <div className="mt-8 flex flex-wrap justify-end gap-3"> {/* flex-wrap dan gap untuk spacing tombol */}
+            <div className="mt-8 flex flex-col md:flex-row flex-wrap justify-end gap-2 md:gap-3">
               {canReview && (
                 <><button
                   className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded text-white disabled:opacity-60 transition duration-150"
@@ -1322,7 +1469,7 @@ const ApprovalSalesOrder: React.FC = () => {
 
       {showEmailModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-2/5 max-h-screen overflow-auto">
+          <div className="bg-white p-3 md:p-6 rounded-lg shadow-lg w-full max-w-sm md:w-2/5 max-h-[90vh] overflow-auto">
             <h3 className="text-lg font-bold mb-4">Manage Email Recipients</h3>
 
             {/* Add New Email Form */}

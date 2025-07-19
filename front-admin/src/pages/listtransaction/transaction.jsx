@@ -86,22 +86,22 @@ const Transaction = () => {
     // eslint-disable-next-line
   }, [showModal]);
 
-useEffect(() => {
-  setWarehouseOptions(Array(updateDetails.length).fill([]));
-  // HAPUS baris berikut!
-  // setSelectedWarehouses(Array(updateDetails.length).fill(null));
-  updateDetails.forEach((d, idx) => {
-    if (d.ItemCodeId) {
-      fetchWarehouseForItemCodeSync(d.ItemCodeId, idx).then((data) => {
-        setWarehouseOptions(prev => {
-          const arr = [...prev];
-          arr[idx] = data || [];
-          return arr;
+  useEffect(() => {
+    setWarehouseOptions(Array(updateDetails.length).fill([]));
+    // HAPUS baris berikut!
+    // setSelectedWarehouses(Array(updateDetails.length).fill(null));
+    updateDetails.forEach((d, idx) => {
+      if (d.ItemCodeId) {
+        fetchWarehouseForItemCodeSync(d.ItemCodeId, idx).then((data) => {
+          setWarehouseOptions(prev => {
+            const arr = [...prev];
+            arr[idx] = data || [];
+            return arr;
+          });
         });
-      });
-    }
-  });
-}, [updateDetails]);
+      }
+    });
+  }, [updateDetails]);
 
 
   useEffect(() => {
@@ -162,7 +162,7 @@ useEffect(() => {
     // 3. Default selected warehouse (dari detail)
     const selectedWarehousesNow = mappedDetails.map(d => d.WarehouseId ?? d.Warehouse ?? null);
 
-    
+
     // 4. Set state (urutan penting)
     setSelectedOrder(order);
     setUpdateDetails(mappedDetails);
@@ -172,7 +172,6 @@ useEffect(() => {
     // 5. Modal baru muncul **setelah semua siap**
     setShowModal(true);
     console.log(mappedDetails); // dalam handleEditOrder
-console.log(selectedWarehousesNow);
   };
 
   const handleFilterChange = (e) => {
@@ -180,14 +179,14 @@ console.log(selectedWarehousesNow);
   };
 
   const handleDetailChange = (index, field, value) => {
-  const newDetails = [...updateDetails];
-  newDetails[index][field] = value;
-  setUpdateDetails(newDetails);
-  // Jika field === "ItemCodeId", fetch warehouse-nya
-  if (field === "ItemCodeId") {
-    fetchWarehouseForItemCodeSync(value, index);
-  }
-};
+    const newDetails = [...updateDetails];
+    newDetails[index][field] = value;
+    setUpdateDetails(newDetails);
+    // Jika field === "ItemCodeId", fetch warehouse-nya
+    if (field === "ItemCodeId") {
+      fetchWarehouseForItemCodeSync(value, index);
+    }
+  };
 
   const fetchItemCodes = async (itemCodeId, query, index) => {
     // ⛔ Jangan fetch kalau query kosong DAN itemCodeId invalid
@@ -256,7 +255,7 @@ console.log(selectedWarehousesNow);
   };
 
   const fetchWarehouseForItemCodeSync = async (itemCodeId, index) => {
-     console.log('Fetching warehouse for', itemCodeId, 'at', index);
+    console.log('Fetching warehouse for', itemCodeId, 'at', index);
     if (!itemCodeId) return [];
     try {
       const res = await axios.post(
@@ -383,11 +382,11 @@ console.log(selectedWarehousesNow);
   const canDelete = hasFeatureAccess(menuAccess, "deletesalesorder");
   const showActions = canEdit || canDelete;
   return (
-    <div className="p-5 ml-60 max-w-6xl mx-auto bg-white rounded-lg shadow-md">
+    <div className="p-3 md:p-5 md:ml-60 max-w-full md:max-w-6xl mx-auto bg-white rounded-lg shadow-md overflow-hidden">
       <h2 className="text-2xl font-bold mb-5">Sales Orders</h2>
 
       {/* Filters and Search */}
-      <div className="flex flex-wrap gap-4 mb-4">
+      <div className="flex flex-col md:flex-row gap-2 md:gap-4 mb-4">
         <input
           type="text"
           placeholder="Search..."
@@ -448,67 +447,119 @@ console.log(selectedWarehousesNow);
       )}
 
       {/* Table */}
-      <table className="w-full border-collapse border border-gray-300">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2">Order Number</th>
-            <th className="border p-2">Dealer</th>
-            <th className="border p-2">Status</th>
-            <th className="border p-2">Date</th>
-            <th className="border p-2">Total Harga</th>
-            {showActions && <th className="border p-2">Actions</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {filteredOrders.map(order => (
-            <tr key={order.Id}>
-              <td className="border p-2">{order.SalesOrderNumber || "-"}</td>
-              <td className="border p-2">{order.Dealer?.CompanyName}</td>
-              <td className="border p-2">
-                <span className={`px-2 py-1 rounded ${order.Status === "APPROVED_EMAIL_SENT" ? "bg-green-100 text-green-800" :
-                  order.Status === "NEEDS_REVISION" ? "bg-yellow-100 text-yellow-800" :
-                    "bg-red-100 text-red-800"
-                  }`}>
-                  {order.Status}
-                </span>
-              </td>
-              <td className="border p-2">
-                {new Date(order.CreatedAt).toLocaleDateString()}
-              </td>
-              <td className="border p-2">
-                Rp {calculateTotal(order.Details).toLocaleString()}
-              </td>
-              {showActions && (
-                <td className="border p-2">
-                  {canEdit && (
-                    <button
-                      onClick={() => handleEditOrder(order)}
-                      className="bg-blue-500 text-white px-3 py-1 rounded mr-2"
-                    >
-                      Edit
-                    </button>
-                  )}
-                  {canDelete && (
-                    <button
-                      onClick={() => handleDelete(order.Id)}
-                      className="bg-red-500 text-white px-3 py-1 rounded"
-                      disabled={deletingId === order.Id}
-                    >
-                      {deletingId === order.Id ? "Deleting..." : "Delete"}
-                    </button>
-                  )}
-                </td>
+      <div className="hidden md:block overflow-x-auto">
+  <table className="min-w-[700px] w-full border-collapse border border-gray-300 text-left">
+    <thead>
+      <tr className="bg-gray-100">
+        <th className="border p-2">Order Number</th>
+        <th className="border p-2">Dealer</th>
+        <th className="border p-2">Status</th>
+        <th className="border p-2">Date</th>
+        <th className="border p-2">Total Harga</th>
+        {showActions && <th className="border p-2">Actions</th>}
+      </tr>
+    </thead>
+    <tbody>
+      {filteredOrders.map(order => (
+        <tr key={order.Id}>
+          <td className="border p-2">{order.SalesOrderNumber || "-"}</td>
+          <td className="border p-2">{order.Dealer?.CompanyName}</td>
+          <td className="border p-2">
+            <span className={`px-2 py-1 rounded ${order.Status === "APPROVED_EMAIL_SENT"
+              ? "bg-green-100 text-green-800"
+              : order.Status === "NEEDS_REVISION"
+                ? "bg-yellow-100 text-yellow-800"
+                : "bg-red-100 text-red-800"
+              }`}>
+              {order.Status}
+            </span>
+          </td>
+          <td className="border p-2">
+            {new Date(order.CreatedAt).toLocaleDateString()}
+          </td>
+          <td className="border p-2">
+            Rp {calculateTotal(order.Details).toLocaleString()}
+          </td>
+          {showActions && (
+            <td className="border p-2">
+              {canEdit && (
+                <button
+                  onClick={() => handleEditOrder(order)}
+                  className="bg-blue-500 text-white px-3 py-1 rounded mr-2"
+                >
+                  Edit
+                </button>
               )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              {canDelete && (
+                <button
+                  onClick={() => handleDelete(order.Id)}
+                  className="bg-red-500 text-white px-3 py-1 rounded"
+                  disabled={deletingId === order.Id}
+                >
+                  {deletingId === order.Id ? "Deleting..." : "Delete"}
+                </button>
+              )}
+            </td>
+          )}
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+
+{/* MOBILE CARD LIST */}
+<div className="md:hidden space-y-4">
+  {filteredOrders.map(order => (
+    <div
+      key={order.Id}
+      className="border rounded-lg p-3 shadow flex flex-col gap-2 bg-white"
+    >
+      <div className="flex justify-between items-center">
+        <span className="font-bold text-base">{order.SalesOrderNumber || "-"}</span>
+        <span className={`text-xs px-2 py-1 rounded ${order.Status === "APPROVED_EMAIL_SENT"
+          ? "bg-green-100 text-green-800"
+          : order.Status === "NEEDS_REVISION"
+            ? "bg-yellow-100 text-yellow-800"
+            : "bg-red-100 text-red-800"
+          }`}>
+          {order.Status}
+        </span>
+      </div>
+      <div className="text-sm text-gray-700">{order.Dealer?.CompanyName}</div>
+      <div className="flex flex-wrap gap-2 text-xs text-gray-600">
+        <div>Tgl: {new Date(order.CreatedAt).toLocaleDateString()}</div>
+        <div>Total: <span className="font-semibold text-green-700">Rp {calculateTotal(order.Details).toLocaleString()}</span></div>
+      </div>
+      {showActions && (
+        <div className="flex gap-2 mt-2">
+          {canEdit && (
+            <button
+              onClick={() => handleEditOrder(order)}
+              className="flex-1 bg-blue-500 text-white px-2 py-1 rounded text-xs"
+            >
+              Edit
+            </button>
+          )}
+          {canDelete && (
+            <button
+              onClick={() => handleDelete(order.Id)}
+              className="flex-1 bg-red-500 text-white px-2 py-1 rounded text-xs"
+              disabled={deletingId === order.Id}
+            >
+              {deletingId === order.Id ? "Deleting..." : "Delete"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  ))}
+</div>
 
 
       {/* Edit Modal */}
       {showModal && selectedOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-[100]">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-[95vw] sm:max-w-[90vw] md:max-w-[80vw] lg:max-w-[75vw] xl:max-w-[70vw] max-h-[90vh] overflow-y-auto">
+          <div className="bg-white p-3 md:p-6 rounded-lg shadow-lg w-full max-w-[98vw] md:max-w-[80vw] max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4">
               Review/Edit Order: {selectedOrder.SalesOrderNumber}
             </h3>
@@ -680,7 +731,7 @@ console.log(selectedWarehousesNow);
               <div className="mt-6">
                 <h4 className="font-bold text-lg mb-2">Item Details</h4>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full border border-gray-300 table-fixed">
+                  <table className="min-w-[600px] w-full border border-gray-300 table-fixed">
                     <colgroup>
                       <col style={{ width: '35%' }} />
                       <col style={{ width: '15%' }} />
@@ -886,7 +937,7 @@ console.log(selectedWarehousesNow);
             </div>
 
             {/* Tombol Action */}
-            <div className="mt-8 flex flex-wrap justify-end gap-3">
+            <div className="mt-8 flex flex-col md:flex-row flex-wrap justify-end gap-2 md:gap-3">
               <button
                 className="bg-gray-500 hover:bg-gray-600 px-4 py-2 rounded text-white transition duration-150"
                 onClick={() => setShowModal(false)}

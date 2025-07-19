@@ -352,7 +352,7 @@ const PopupChoose: React.FC<{ productId: number; onClose?: () => void }> = ({ pr
           </p>
         </div>
       )}
-      <pre>{JSON.stringify({ userId, selectedIdx, loadingRule, orderRule }, null, 2)}</pre>
+
       <button
         onClick={addToCart}
         disabled={!userId || selectedIdx === null || loadingRule || !orderRule || !orderRule.PriceValid || !orderRule.StockValid}

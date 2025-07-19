@@ -736,7 +736,10 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
           SalesOrderNumber: generatedNumber,
         },
       });
-      res.status(200).json({ message: "Sales Order approved and email process completed." });
+      res.status(200).json({
+        success: true,
+        message: "Approve berhasil! Sales Order telah di-approve dan email telah dikirim.",
+      });
     } else {
       res.status(400).json({ message: "Stock sudah berhasil update, tetapi ada email yang gagal terkirim. Status tidak berubah." });
     }

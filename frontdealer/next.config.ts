@@ -6,7 +6,7 @@ const nextConfig = {
       {
         source: "/api/:path*",
        // destination: "http://localhost:3000/api/:path*", 
-        destination: "http://sunflexstoreindonesia.com:3000/api/:path*", // Ubah ke IP lokal kamu
+         destination: "http://sunflexstoreindonesia.com:3000/api/:path*", // Ubah ke IP lokal kamu
       },
     ];
   },
