@@ -1023,6 +1023,7 @@ export async function fetchWarehouseForItemCode(req: Request, res: Response) {
       return;
     }
 
+    // Ambil warehouse yang punya stok (QtyOnHand > 0)
     const stocks = await prisma.warehouseStock.findMany({
       where: {
         ItemCodeId: ItemCodeId,
@@ -1041,17 +1042,54 @@ export async function fetchWarehouseForItemCode(req: Request, res: Response) {
       }
     });
 
-    const result = stocks
-      .filter(s => s.Warehouse && s.Warehouse.Id)
-      .map(s => ({
-        Id: s.Warehouse.Id,
-        Name: s.Warehouse.Name,
-        QtyOnHand: s.QtyOnHand
-      }));
+    // Ambil SEMUA warehouse aktif yang memiliki baris di warehouseStock (termasuk QtyOnHand = 0)
+    const allWarehouseStocks = await prisma.warehouseStock.findMany({
+      where: {
+        ItemCodeId: ItemCodeId,
+        DeletedAt: null,
+        Warehouse: { DeletedAt: null },
+      },
+      select: {
+        Warehouse: {
+          select: {
+            Id: true,
+            Name: true,
+          }
+        },
+        QtyOnHand: true
+      }
+    });
 
-    res.json({ success: true, data: result }); // ⬅️ tanpa return
+    // Gabungkan, utamakan QtyOnHand asli jika sudah ada, sisanya tambahkan QtyOnHand = 0 jika memang kosong
+    const warehouseMap: Record<number, { Id: number; Name: string; QtyOnHand: number }> = {};
+
+    // Masukkan semua stocks (yang QtyOnHand > 0)
+    for (const s of stocks) {
+      if (s.Warehouse && s.Warehouse.Id) {
+        warehouseMap[s.Warehouse.Id] = {
+          Id: s.Warehouse.Id,
+          Name: s.Warehouse.Name ?? "",
+          QtyOnHand: s.QtyOnHand
+        };
+      }
+    }
+    // Tambahkan semua warehouse lain (yang QtyOnHand = 0 dan belum masuk di atas)
+    for (const s of allWarehouseStocks) {
+      if (s.Warehouse && s.Warehouse.Id && !warehouseMap[s.Warehouse.Id]) {
+        warehouseMap[s.Warehouse.Id] = {
+          Id: s.Warehouse.Id,
+          Name: s.Warehouse.Name ?? "",
+          QtyOnHand: s.QtyOnHand // sudah 0
+        };
+      }
+    }
+
+    // Jadikan array
+    const result = Object.values(warehouseMap);
+
+    res.json({ success: true, data: result });
   } catch (error) {
     console.error("fetchWarehouseForItemCode error:", error);
-    res.status(500).json({ message: "Internal server error" }); // ⬅️ tanpa return
+    res.status(500).json({ message: "Internal server error" });
   }
 }

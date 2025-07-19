@@ -5,10 +5,19 @@ export default function GlobalErrorPopup() {
 
   useEffect(() => {
     function handler(e) {
-      setErr(e.detail?.message || "Unknown error");
-      // Otomatis hilang setelah 3 detik
+      const msg = e.detail?.message || "Unknown error";
+
+      // Deny jika msg mengandung kata 'request', 'status', atau '500' (tidak case sensitive)
+      const denyPattern = /(request|status|500)/i;
+      if (denyPattern.test(msg)) {
+        return; // Tidak tampilkan error ini di popup
+      }
+
+      setErr(msg);
+
       setTimeout(() => setErr(null), 3000);
     }
+
     window.addEventListener("global-error", handler);
     return () => window.removeEventListener("global-error", handler);
   }, []);

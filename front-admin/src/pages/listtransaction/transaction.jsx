@@ -10,6 +10,34 @@ function hasFeatureAccess(menuAccess, feature) {
   );
 }
 
+function calculateOrderSummaryFrontend(items) {
+  const details = items.map((item) => {
+    const price = item.Price ?? 0;
+    const qty = item.Quantity ?? 0;
+    const taxPercentage = (typeof item.TaxPercentage === "number") ? item.TaxPercentage : 0;
+    const subtotal = price * qty;
+    const taxAmount = subtotal * (taxPercentage / 100);
+    const finalPrice = subtotal + taxAmount;
+    return {
+      ...item,
+      Subtotal: subtotal,
+      TaxPercentage: taxPercentage,
+      TaxAmount: taxAmount,
+      FinalPrice: finalPrice
+    };
+  });
+
+  const subtotal = details.reduce((sum, d) => sum + d.Subtotal, 0);
+  const totalTax = details.reduce((sum, d) => sum + d.TaxAmount, 0);
+  const totalWithTax = details.reduce((sum, d) => sum + d.FinalPrice, 0);
+
+  return {
+    details,
+    subtotal,
+    totalTax,
+    totalWithTax,
+  };
+}
 
 const Transaction = () => {
   const [salesOrders, setSalesOrders] = useState([]);
@@ -113,15 +141,13 @@ const Transaction = () => {
       ItemCodeId: item.ItemCodeId,
       Quantity: item.Quantity,
       Price: item.Price,
-      TaxPercentage: forceApplyTax && activeTax
-        ? undefined
-        : (typeof item.TaxPercentage === "number" ? item.TaxPercentage : undefined),
+      TaxPercentage: typeof item.TaxPercentage === "number" ? item.TaxPercentage : 0,
     }));
 
-    fetchPricingSummary(items, forceApplyTax)
-      .then((result) => setPricingSummary(result))
-      .catch(() => setPricingSummary(null));
-  }, [updateDetails, forceApplyTax, activeTax, showModal]);
+    // Hitung langsung
+    const summary = calculateOrderSummaryFrontend(items);
+    setPricingSummary(summary);
+  }, [updateDetails, showModal]);
 
   const fetchSalesOrders = async () => {
     try {
@@ -448,112 +474,112 @@ const Transaction = () => {
 
       {/* Table */}
       <div className="hidden md:block overflow-x-auto">
-  <table className="min-w-[700px] w-full border-collapse border border-gray-300 text-left">
-    <thead>
-      <tr className="bg-gray-100">
-        <th className="border p-2">Order Number</th>
-        <th className="border p-2">Dealer</th>
-        <th className="border p-2">Status</th>
-        <th className="border p-2">Date</th>
-        <th className="border p-2">Total Harga</th>
-        {showActions && <th className="border p-2">Actions</th>}
-      </tr>
-    </thead>
-    <tbody>
-      {filteredOrders.map(order => (
-        <tr key={order.Id}>
-          <td className="border p-2">{order.SalesOrderNumber || "-"}</td>
-          <td className="border p-2">{order.Dealer?.CompanyName}</td>
-          <td className="border p-2">
-            <span className={`px-2 py-1 rounded ${order.Status === "APPROVED_EMAIL_SENT"
-              ? "bg-green-100 text-green-800"
-              : order.Status === "NEEDS_REVISION"
-                ? "bg-yellow-100 text-yellow-800"
-                : "bg-red-100 text-red-800"
-              }`}>
-              {order.Status}
-            </span>
-          </td>
-          <td className="border p-2">
-            {new Date(order.CreatedAt).toLocaleDateString()}
-          </td>
-          <td className="border p-2">
-            Rp {calculateTotal(order.Details).toLocaleString()}
-          </td>
-          {showActions && (
-            <td className="border p-2">
-              {canEdit && (
-                <button
-                  onClick={() => handleEditOrder(order)}
-                  className="bg-blue-500 text-white px-3 py-1 rounded mr-2"
-                >
-                  Edit
-                </button>
-              )}
-              {canDelete && (
-                <button
-                  onClick={() => handleDelete(order.Id)}
-                  className="bg-red-500 text-white px-3 py-1 rounded"
-                  disabled={deletingId === order.Id}
-                >
-                  {deletingId === order.Id ? "Deleting..." : "Delete"}
-                </button>
-              )}
-            </td>
-          )}
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
+        <table className="min-w-[700px] w-full border-collapse border border-gray-300 text-left">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border p-2">Order Number</th>
+              <th className="border p-2">Dealer</th>
+              <th className="border p-2">Status</th>
+              <th className="border p-2">Date</th>
+              <th className="border p-2">Total Harga</th>
+              {showActions && <th className="border p-2">Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {filteredOrders.map(order => (
+              <tr key={order.Id}>
+                <td className="border p-2">{order.SalesOrderNumber || "-"}</td>
+                <td className="border p-2">{order.Dealer?.CompanyName}</td>
+                <td className="border p-2">
+                  <span className={`px-2 py-1 rounded ${order.Status === "APPROVED_EMAIL_SENT"
+                    ? "bg-green-100 text-green-800"
+                    : order.Status === "NEEDS_REVISION"
+                      ? "bg-yellow-100 text-yellow-800"
+                      : "bg-red-100 text-red-800"
+                    }`}>
+                    {order.Status}
+                  </span>
+                </td>
+                <td className="border p-2">
+                  {new Date(order.CreatedAt).toLocaleDateString()}
+                </td>
+                <td className="border p-2">
+                  Rp {calculateTotal(order.Details).toLocaleString()}
+                </td>
+                {showActions && (
+                  <td className="border p-2">
+                    {canEdit && (
+                      <button
+                        onClick={() => handleEditOrder(order)}
+                        className="bg-blue-500 text-white px-3 py-1 rounded mr-2"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        onClick={() => handleDelete(order.Id)}
+                        className="bg-red-500 text-white px-3 py-1 rounded"
+                        disabled={deletingId === order.Id}
+                      >
+                        {deletingId === order.Id ? "Deleting..." : "Delete"}
+                      </button>
+                    )}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-{/* MOBILE CARD LIST */}
-<div className="md:hidden space-y-4">
-  {filteredOrders.map(order => (
-    <div
-      key={order.Id}
-      className="border rounded-lg p-3 shadow flex flex-col gap-2 bg-white"
-    >
-      <div className="flex justify-between items-center">
-        <span className="font-bold text-base">{order.SalesOrderNumber || "-"}</span>
-        <span className={`text-xs px-2 py-1 rounded ${order.Status === "APPROVED_EMAIL_SENT"
-          ? "bg-green-100 text-green-800"
-          : order.Status === "NEEDS_REVISION"
-            ? "bg-yellow-100 text-yellow-800"
-            : "bg-red-100 text-red-800"
-          }`}>
-          {order.Status}
-        </span>
+      {/* MOBILE CARD LIST */}
+      <div className="md:hidden space-y-4">
+        {filteredOrders.map(order => (
+          <div
+            key={order.Id}
+            className="border rounded-lg p-3 shadow flex flex-col gap-2 bg-white"
+          >
+            <div className="flex justify-between items-center">
+              <span className="font-bold text-base">{order.SalesOrderNumber || "-"}</span>
+              <span className={`text-xs px-2 py-1 rounded ${order.Status === "APPROVED_EMAIL_SENT"
+                ? "bg-green-100 text-green-800"
+                : order.Status === "NEEDS_REVISION"
+                  ? "bg-yellow-100 text-yellow-800"
+                  : "bg-red-100 text-red-800"
+                }`}>
+                {order.Status}
+              </span>
+            </div>
+            <div className="text-sm text-gray-700">{order.Dealer?.CompanyName}</div>
+            <div className="flex flex-wrap gap-2 text-xs text-gray-600">
+              <div>Tgl: {new Date(order.CreatedAt).toLocaleDateString()}</div>
+              <div>Total: <span className="font-semibold text-green-700">Rp {calculateTotal(order.Details).toLocaleString()}</span></div>
+            </div>
+            {showActions && (
+              <div className="flex gap-2 mt-2">
+                {canEdit && (
+                  <button
+                    onClick={() => handleEditOrder(order)}
+                    className="flex-1 bg-blue-500 text-white px-2 py-1 rounded text-xs"
+                  >
+                    Edit
+                  </button>
+                )}
+                {canDelete && (
+                  <button
+                    onClick={() => handleDelete(order.Id)}
+                    className="flex-1 bg-red-500 text-white px-2 py-1 rounded text-xs"
+                    disabled={deletingId === order.Id}
+                  >
+                    {deletingId === order.Id ? "Deleting..." : "Delete"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
-      <div className="text-sm text-gray-700">{order.Dealer?.CompanyName}</div>
-      <div className="flex flex-wrap gap-2 text-xs text-gray-600">
-        <div>Tgl: {new Date(order.CreatedAt).toLocaleDateString()}</div>
-        <div>Total: <span className="font-semibold text-green-700">Rp {calculateTotal(order.Details).toLocaleString()}</span></div>
-      </div>
-      {showActions && (
-        <div className="flex gap-2 mt-2">
-          {canEdit && (
-            <button
-              onClick={() => handleEditOrder(order)}
-              className="flex-1 bg-blue-500 text-white px-2 py-1 rounded text-xs"
-            >
-              Edit
-            </button>
-          )}
-          {canDelete && (
-            <button
-              onClick={() => handleDelete(order.Id)}
-              className="flex-1 bg-red-500 text-white px-2 py-1 rounded text-xs"
-              disabled={deletingId === order.Id}
-            >
-              {deletingId === order.Id ? "Deleting..." : "Delete"}
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  ))}
-</div>
 
 
       {/* Edit Modal */}
@@ -675,55 +701,7 @@ const Transaction = () => {
                   placeholder="Note"
                 />
               </div>
-              <div className="col-span-1 md:col-span-3 flex flex-col md:flex-row md:items-center gap-6">
-                <label className="inline-flex items-center flex-shrink-0">
-                  <input
-                    type="checkbox"
-                    checked={forceApplyTax}
-                    onChange={async (e) => {
-                      const newValue = e.target.checked;
-                      setForceApplyTax(newValue);
-                      if (newValue) {
-                        await fetchActiveTax();
-                        if (activeTax) {
-                          const updated = updateDetails.map(detail => ({
-                            ...detail,
-                            FinalPrice: detail.Quantity * detail.Price * (1 + activeTax.Percentage / 100),
-                          }));
-                          setUpdateDetails(updated);
-                        }
-                      } else {
-                        setActiveTax(null);
-                        const updated = updateDetails.map(detail => ({
-                          ...detail,
-                          FinalPrice: detail.Quantity * detail.Price,
-                        }));
-                        setUpdateDetails(updated);
-                      }
-                    }}
-                    className="form-checkbox h-5 w-5 text-indigo-600"
-                  />
-                  <span className="ml-2 text-sm text-gray-700">
-                    Active Tax {activeTax && `(${activeTax.Percentage}%)`}
-                  </span>
-                </label>
-                <span className="mx-2 text-gray-400 font-bold text-xl hidden md:inline">||</span>
-                <div className="flex items-center mt-3 md:mt-0">
-                  <label className="text-sm font-medium text-gray-700 mr-2 min-w-[100px]">Payment Term</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={selectedOrder.PaymentTerm || ""}
-                    onChange={e =>
-                      setSelectedOrder({ ...selectedOrder, PaymentTerm: parseInt(e.target.value) || 0 })
-                    }
-                    className="border rounded px-3 py-2 w-32"
-                    placeholder="Hari"
-                  />
-                  <span className="ml-2 text-sm text-gray-600">hari</span>
-                </div>
-              </div>
+
             </div>
 
             {/* Item Table */}
@@ -892,7 +870,18 @@ const Transaction = () => {
                       </tr>
                       <tr>
                         <td colSpan={4} className="text-right font-bold px-3 py-2 border">
-                          Pajak ({pricingSummary?.activeTax?.Percentage ?? 0}%):
+                          Pajak{pricingSummary && pricingSummary.details.length > 0 ? " (" +
+                            Array.from(
+                              new Set(
+                                pricingSummary.details
+                                  .map(d => typeof d.TaxPercentage === "number" ? d.TaxPercentage : 0)
+                                  .filter(p => p > 0)
+                              )
+                            )
+                              .sort((a, b) => a - b)
+                              .join(", ")
+                            + "%)"
+                            : ""}:
                         </td>
                         <td className="border px-3 py-2 text-gray-800">
                           Rp {pricingSummary ? pricingSummary.totalTax.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 0}

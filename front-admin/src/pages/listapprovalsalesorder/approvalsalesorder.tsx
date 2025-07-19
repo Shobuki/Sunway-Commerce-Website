@@ -67,6 +67,7 @@ interface SalesOrderDetail {
   WarehouseId?: number | null;
   warehouseOptions?: { Id: number; Name: string; QtyOnHand: number }[];
   _priceInput?: string;
+  _quantityInput?: string;
 }
 
 interface EmailRecipient {
@@ -507,11 +508,11 @@ const ApprovalSalesOrder: React.FC = () => {
   const handleApprove = async () => {
     if (approveLoading) return;
     setApproveLoading(true);
-    setApproveMessage("");
+    setApproveMessage(""); // Reset sebelum mulai
 
     try {
       const token = localStorage.getItem("token");
-      await axios.post("/api/admin/admin/salesorder/approval/approve", {
+      const res = await axios.post("/api/admin/admin/salesorder/approval/approve", {
         SalesOrderId: selectedOrder?.Id,
         SalesId: salesId,
         SalesOrderNumber: selectedOrder?.SalesOrderNumber,
@@ -530,21 +531,28 @@ const ApprovalSalesOrder: React.FC = () => {
             PriceCategoryId: detail.PriceCategoryId ?? null,
             WarehouseId: selectedWarehouses[idx] ? selectedWarehouses[idx] : null,
           };
-          if (detail.Id) obj.Id = detail.Id; // hanya masukkan jika edit
+          if (detail.Id) obj.Id = detail.Id;
           return obj;
         }),
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
+      // Ambil message dari response API
+      setApproveMessage(res.data?.message || "Approval berhasil.");
+      // Optional: update status lokal
       setSalesOrders(prev =>
         prev.map(order =>
           order.Id === selectedOrder?.Id ? { ...order, Status: "APPROVED_EMAIL_SENT" } : order
         )
       );
-      setApproveMessage("✔️ Approval berhasil!");
-    } catch (error) {
-      setApproveMessage("❌ Approval gagal, coba lagi.");
+    } catch (error: any) {
+      // Ambil message dari response error API
+      let msg = "Approval gagal.";
+      if (error.response && error.response.data && error.response.data.message) {
+        msg = error.response.data.message;
+      }
+      setApproveMessage(msg);
       console.error("Approval failed:", error);
     } finally {
       setApproveLoading(false);
@@ -808,8 +816,7 @@ const ApprovalSalesOrder: React.FC = () => {
 
       return matchesDealer && matchesStatus && matchesDate;
     });
-  console.log('All salesOrders:', salesOrders);
-  console.log('Filtered orders:', filteredOrders);
+
 
   const sortedOrders = [...filteredOrders]
     .sort((a, b) => {
@@ -827,13 +834,7 @@ const ApprovalSalesOrder: React.FC = () => {
         : nameB.localeCompare(nameA);
     });
 
-  {
-    approveMessage && (
-      <div className="fixed top-5 left-1/2 transform -translate-x-1/2 bg-black text-white px-4 py-2 rounded shadow-lg z-[9999] text-center">
-        {approveMessage}
-      </div>
-    )
-  }
+
 
   const canListRecipient = menuAccess && hasFeatureAccess(menuAccess, "listemailrecipient");
   const canCrudRecipient = menuAccess && hasFeatureAccess(menuAccess, "createupdatedeleteemailrecipient");
@@ -845,6 +846,41 @@ const ApprovalSalesOrder: React.FC = () => {
 
   return (
     <div className="p-3 md:p-5 md:ml-60 max-w-full md:max-w-6xl mx-auto bg-white rounded-lg shadow-md overflow-hidden">
+      {approveMessage && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 30, // sama seperti GlobalErrorPopup
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#28a745", // hijau sukses, ganti sesuai preferensi
+            color: "#fff",
+            padding: "16px 24px",
+            borderRadius: 8,
+            zIndex: 2000,
+            minWidth: 300,
+            textAlign: "center",
+            boxShadow: "0 2px 8px rgba(0,0,0,.15)",
+            fontWeight: "bold"
+          }}
+        >
+          {approveMessage}
+          <button
+            onClick={() => setApproveMessage("")}
+            style={{
+              marginLeft: 16,
+              background: "transparent",
+              color: "#fff",
+              border: "none",
+              fontWeight: "bold",
+              fontSize: 18,
+              cursor: "pointer"
+            }}
+          >
+            &times;
+          </button>
+        </div>
+      )}
       <h2 className="text-2xl font-bold mb-5">Approval Sales Orders</h2>
       {canListRecipient && (
         <button
@@ -1184,23 +1220,29 @@ const ApprovalSalesOrder: React.FC = () => {
                             <td className="border px-2 py-1 align-top">
                               <input
                                 type="text"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
+                                inputMode="decimal"
+                                pattern="^\\d*[.,]?\\d*$"
                                 className="w-full border px-2 py-1 rounded focus:ring-indigo-500 focus:border-indigo-500"
-                                value={detail.Quantity === 0 ? "" : detail.Quantity.toString()}
-                                onChange={(e) => {
-                                  // Hanya angka diperbolehkan
-                                  const val = e.target.value.replace(/[^0-9]/g, "");
-                                  // Ubah state ke string dulu agar cursor nyaman
+                                value={typeof detail._quantityInput === "string"
+                                  ? detail._quantityInput
+                                  : (detail.Quantity === 0 ? "" : detail.Quantity.toString())}
+                                onChange={e => {
+                                  let val = e.target.value
+                                    .replace(/[^0-9.,]/g, "") // hanya angka, titik, koma
+                                    .replace(/,/g, ".");      // ganti koma jadi titik
+
+                                  // Jangan lebih dari satu titik
+                                  val = val.replace(/(\..*)\./g, '$1');
+
                                   setUpdateDetails(prev => {
                                     const updated = [...prev];
-                                    // Kosong = 0
                                     updated[index] = {
                                       ...updated[index],
-                                      Quantity: val === "" ? 0 : parseInt(val)
+                                      _quantityInput: val,
+                                      Quantity: val === "" ? 0 : parseFloat(val)
                                     };
                                     // Kalkulasi FinalPrice
-                                    const qty = val === "" ? 0 : parseInt(val);
+                                    const qty = val === "" ? 0 : parseFloat(val);
                                     const price = updated[index].Price;
                                     updated[index].FinalPrice = forceApplyTax && activeTax
                                       ? Math.round(qty * price * (1 + (activeTax?.Percentage || 0) / 100))
@@ -1208,15 +1250,25 @@ const ApprovalSalesOrder: React.FC = () => {
                                     return updated;
                                   });
                                 }}
-                                onBlur={(e) => {
-                                  // Jika input kosong, balikin ke 1 atau 0 sesuai kebutuhan
-                                  if (e.target.value === "") {
-                                    setUpdateDetails(prev => {
-                                      const updated = [...prev];
-                                      updated[index] = { ...updated[index], Quantity: 1, FinalPrice: updated[index].Price };
-                                      return updated;
-                                    });
-                                  }
+                                onBlur={e => {
+                                  let val = e.target.value.replace(/,/g, ".");
+                                  // Hilangkan trailing titik/koma
+                                  if (val.endsWith(".") || val.endsWith(",")) val = val.slice(0, -1);
+                                  setUpdateDetails(prev => {
+                                    const updated = [...prev];
+                                    updated[index] = {
+                                      ...updated[index],
+                                      _quantityInput: val,
+                                      Quantity: val === "" ? 0 : parseFloat(val)
+                                    };
+                                    // Kalkulasi FinalPrice
+                                    const qty = val === "" ? 0 : parseFloat(val);
+                                    const price = updated[index].Price;
+                                    updated[index].FinalPrice = forceApplyTax && activeTax
+                                      ? Math.round(qty * price * (1 + (activeTax?.Percentage || 0) / 100))
+                                      : qty * price;
+                                    return updated;
+                                  });
                                 }}
                               />
                             </td>
