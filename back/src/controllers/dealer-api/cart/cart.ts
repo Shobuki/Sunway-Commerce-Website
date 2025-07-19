@@ -146,39 +146,39 @@ export const addUpdateCart = async (req: Request, res: Response): Promise<void> 
     }
 
     // PATCH: Perbolehkan cart asal SALAH SATU itemcode di partnumber punya harga
-let resolved = resolvePrice(requestItem.Price, dealerId, priceCategoryId, Quantity);
+    let resolved = resolvePrice(requestItem.Price, dealerId, priceCategoryId, Quantity);
 
-if (resolved.price === 0) {
-  // Cek SEMUA itemCode lain dalam partnumber (AllowItemCodeSelection=false saja)
-  let fallbackPrice = null;
-  let fallbackItem = null;
-  for (const ic of allItemCodes) {
-    const r = resolvePrice(ic.Price, dealerId, priceCategoryId, Quantity);
-    if (r.price > 0) {
-      // Simpan harga termurah, kalau ada lebih dari satu
-      if (!fallbackPrice || r.price < fallbackPrice.price) {
-        fallbackPrice = r;
-        fallbackItem = ic;
+    if (resolved.price === 0) {
+      // Cek SEMUA itemCode lain dalam partnumber (AllowItemCodeSelection=false saja)
+      let fallbackPrice = null;
+      let fallbackItem = null;
+      for (const ic of allItemCodes) {
+        const r = resolvePrice(ic.Price, dealerId, priceCategoryId, Quantity);
+        if (r.price > 0) {
+          // Simpan harga termurah, kalau ada lebih dari satu
+          if (!fallbackPrice || r.price < fallbackPrice.price) {
+            fallbackPrice = r;
+            fallbackItem = ic;
+          }
+        }
+      }
+      if (fallbackPrice && fallbackItem) {
+        // GUNAKAN fallback item untuk cart
+        requestItem.Id = fallbackItem.Id;
+        requestItem.MinOrderQuantity = fallbackItem.MinOrderQuantity;
+        requestItem.OrderStep = fallbackItem.OrderStep;
+        resolved = fallbackPrice;
+        // Lanjut proses seperti biasa di bawah ini
+      } else {
+        // Benar-benar tidak ada harga valid di seluruh itemCode partnumber tsb
+        res.status(400).json({ message: "Tidak ada harga aktif untuk dealer dan quantity ini (semua itemCode pada partnumber)." });
+        return;
       }
     }
-  }
-  if (fallbackPrice && fallbackItem) {
-    // GUNAKAN fallback item untuk cart
-    requestItem.Id = fallbackItem.Id;
-    requestItem.MinOrderQuantity = fallbackItem.MinOrderQuantity;
-    requestItem.OrderStep = fallbackItem.OrderStep;
-    resolved = fallbackPrice;
-    // Lanjut proses seperti biasa di bawah ini
-  } else {
-    // Benar-benar tidak ada harga valid di seluruh itemCode partnumber tsb
-    res.status(400).json({ message: "Tidak ada harga aktif untuk dealer dan quantity ini (semua itemCode pada partnumber)." });
-    return;
-  }
-}
-if (resolved.source === "wholesale" && (Quantity < resolved.min || Quantity > resolved.max)) {
-  res.status(400).json({ message: `Qty harus antara ${resolved.min} dan ${resolved.max} untuk harga grosir.` });
-  return;
-}
+    if (resolved.source === "wholesale" && (Quantity < resolved.min || Quantity > resolved.max)) {
+      res.status(400).json({ message: `Qty harus antara ${resolved.min} dan ${resolved.max} untuk harga grosir.` });
+      return;
+    }
 
 
     // Setelah requestItem diambil...
@@ -254,7 +254,11 @@ if (resolved.source === "wholesale" && (Quantity < resolved.min || Quantity > re
       }
       // Hapus CartItem lain pada partnumber selain yang terpilih
       for (const ci of cart.CartItems) {
-        if (ci.ItemCode.PartNumberId === requestItem.PartNumberId && ci.ItemCodeId !== requestItem.Id) {
+        if (
+          ci.ItemCode.PartNumberId === requestItem.PartNumberId &&
+          ci.ItemCodeId !== requestItem.Id &&
+          ci.ItemCode.AllowItemCodeSelection === false
+        ) {
           await prisma.cartItem.delete({ where: { Id: ci.Id } });
         }
       }
@@ -443,7 +447,10 @@ if (resolved.source === "wholesale" && (Quantity < resolved.min || Quantity > re
 
     // Hapus CartItem lain pada partnumber selain yang terpilih
     for (const ci of cart.CartItems) {
-      if (ci.ItemCode.PartNumberId === partNumberId && ci.ItemCodeId !== best.ItemCodeId) {
+      if (
+        ci.ItemCode.PartNumberId === partNumberId &&
+        ci.ItemCodeId !== best.ItemCodeId
+      ) {
         await prisma.cartItem.delete({ where: { Id: ci.Id } });
       }
     }
@@ -803,93 +810,130 @@ export const getCartByUserId = async (req: Request, res: Response): Promise<void
       return;
     }
 
+    // GROUPING & DEDUPLICATION LOGIC (HANYA DI LEVEL RESPONSE, TIDAK MENGUBAH DATABASE)
+
+// Build map {PartNumberId: [CartItems]}
+const grouped: { [partNumberId: number]: any[] } = {};
+const uniqueItems: { [itemCodeId: number]: boolean } = {};
+const filteredCartItems: typeof cart.CartItems = [];
+
+for (const item of cart.CartItems) {
+  const code = item.ItemCode;
+  // Deduplicate ItemCodeId (hanya satu per ItemCodeId)
+  if (uniqueItems[code.Id]) continue;
+  uniqueItems[code.Id] = true;
+
+  if (!code.PartNumberId) {
+    filteredCartItems.push(item);
+    continue;
+  }
+  // Group per PartNumberId
+  if (!grouped[code.PartNumberId]) grouped[code.PartNumberId] = [];
+  grouped[code.PartNumberId].push(item);
+}
+
+// Now, for each group, allow:
+//  - Semua AllowItemCodeSelection:true bebas coexist
+//  - HANYA SATU AllowItemCodeSelection:false per partnumber (ambil satu random/pertama)
+for (const partNumberId in grouped) {
+  const group = grouped[partNumberId];
+  // Pisahkan yang AllowItemCodeSelection:true & false
+  const allowTrue = group.filter(i => i.ItemCode.AllowItemCodeSelection);
+  const allowFalse = group.filter(i => !i.ItemCode.AllowItemCodeSelection);
+
+  // Masukkan semua AllowItemCodeSelection:true
+  filteredCartItems.push(...allowTrue);
+  // Masukkan HANYA SATU AllowItemCodeSelection:false
+  if (allowFalse.length > 0) filteredCartItems.push(allowFalse[0]);
+}
+
     const transformedCart = {
-  Id: cart.Id,
-  UserId: cart.UserId,
-  CreatedAt: cart.CreatedAt,
-  DeletedAt: cart.DeletedAt,
-  CartItems: await Promise.all(cart.CartItems.map(async item => {
-    const code = item.ItemCode;
-    const allow = code.AllowItemCodeSelection;
+      Id: cart.Id,
+      UserId: cart.UserId,
+      CreatedAt: cart.CreatedAt,
+      DeletedAt: cart.DeletedAt,
+      CartItems: await Promise.all(filteredCartItems.map(async item => {
+        const code = item.ItemCode;
+        const allow = code.AllowItemCodeSelection;
 
-    let resolved = resolvePrice(
-      code.Price,
-      cart.User.DealerId,
-      cart.User.Dealer?.PriceCategoryId,
-      item.Quantity
-    );
+        let resolved = resolvePrice(
+          code.Price,
+          cart.User.DealerId,
+          cart.User.Dealer?.PriceCategoryId,
+          item.Quantity
+        );
 
-    let totalStock = code.WarehouseStocks?.reduce((sum, ws) => sum + ws.QtyOnHand, 0) ?? 0;
-    let finalPrice = (resolved.price && totalStock > 0) ? resolved.price : 0;
-    let priceSource = resolved.source;
-    let minWholesale = resolved.min;
-    let maxWholesale = resolved.max;
+        let totalStock = code.WarehouseStocks?.reduce((sum, ws) => sum + ws.QtyOnHand, 0) ?? 0;
+        let finalPrice = (resolved.price && totalStock > 0) ? resolved.price : 0;
+        let priceSource = resolved.source;
+        let minWholesale = resolved.min;
+        let maxWholesale = resolved.max;
 
-    // ---- PATCH: Jika tidak ada harga, ambil harga tertinggi dari semua ItemCode dalam partnumber yang sama ----
-    if ((!resolved.price || resolved.price === 0) && code.PartNumberId && !allow) {
-      // Query semua itemcode pada partnumber yg sama (allow selection false saja)
-      const partItemCodes = await prisma.itemCode.findMany({
-        where: {
-          PartNumberId: code.PartNumberId,
-          AllowItemCodeSelection: false,
-          DeletedAt: null
-        },
-        include: {
-          Price: {
-            where: { DeletedAt: null },
-            include: { WholesalePrices: { where: { DeletedAt: null } } }
+        // ---- PATCH: Jika tidak ada harga, ambil harga tertinggi dari semua ItemCode dalam partnumber yang sama ----
+        if ((!resolved.price || resolved.price === 0) && code.PartNumberId && !allow) {
+          // Query semua itemcode pada partnumber yg sama (allow selection false saja)
+          const partItemCodes = await prisma.itemCode.findMany({
+            where: {
+              PartNumberId: code.PartNumberId,
+              AllowItemCodeSelection: false,
+              DeletedAt: null
+            },
+            include: {
+              Price: {
+                where: { DeletedAt: null },
+                include: { WholesalePrices: { where: { DeletedAt: null } } }
+              }
+            }
+          });
+
+          // Dari semua itemcode tsb, cek harga yg valid, ambil TERTINGGI
+          let maxResolved: { price: number, source: string | null, min?: number, max?: number } = { price: 0, source: null };
+          for (const ic of partItemCodes) {
+            // Pakai quantity item di cart
+            const r = resolvePrice(ic.Price, cart.User.DealerId, cart.User.Dealer?.PriceCategoryId, item.Quantity);
+            if (r.price > maxResolved.price) {
+              maxResolved = r;
+            }
+          }
+          if (maxResolved.price > 0) {
+            finalPrice = maxResolved.price;
+            priceSource = maxResolved.source;
+            minWholesale = maxResolved.min;
+            maxWholesale = maxResolved.max;
           }
         }
-      });
+        // ---- END PATCH ----
 
-      // Dari semua itemcode tsb, cek harga yg valid, ambil TERTINGGI
-      let maxResolved: { price: number, source: string | null, min?: number, max?: number } = { price: 0, source: null };
-      for (const ic of partItemCodes) {
-        // Pakai quantity item di cart
-        const r = resolvePrice(ic.Price, cart.User.DealerId, cart.User.Dealer?.PriceCategoryId, item.Quantity);
-        if (r.price > maxResolved.price) {
-          maxResolved = r;
-        }
-      }
-      if (maxResolved.price > 0) {
-        finalPrice = maxResolved.price;
-        priceSource = maxResolved.source;
-        minWholesale = maxResolved.min;
-        maxWholesale = maxResolved.max;
-      }
-    }
-    // ---- END PATCH ----
-
-    return {
-      Id: item.Id,
-      CartId: item.CartId,
-      ItemCodeId: item.ItemCodeId,
-      Quantity: item.Quantity,
-      CreatedAt: item.CreatedAt,
-      DeletedAt: item.DeletedAt,
-      DisplayName: allow
-        ? code.Name
-        : code.PartNumber?.Name ?? 'Unnamed PartNumber',
-      Price: finalPrice,
-      PriceSource: priceSource,
-      MinQtyWholesale: minWholesale,
-      MaxQtyWholesale: maxWholesale,
-      ItemCode: {
-        Id: code.Id,
-        CreatedAt: code.CreatedAt,
-        DeletedAt: code.DeletedAt,
-        Weight: code.Weight,
-        AllowItemCodeSelection: code.AllowItemCodeSelection,
-        MinOrderQuantity: code.MinOrderQuantity,
-        QtyPO: code.QtyPO,
-        OrderStep: code.OrderStep,
-        PartNumberId: code.PartNumberId,
-        PartNumber: code.PartNumber,
-        ...(allow ? { Name: code.Name } : {})
-      }
+        return {
+          Id: item.Id,
+          CartId: item.CartId,
+          ItemCodeId: item.ItemCodeId,
+          Quantity: item.Quantity,
+          CreatedAt: item.CreatedAt,
+          DeletedAt: item.DeletedAt,
+          DisplayName: allow
+            ? code.Name
+            : code.PartNumber?.Name ?? 'Unnamed PartNumber',
+          Price: finalPrice,
+          PriceSource: priceSource,
+          MinQtyWholesale: minWholesale,
+          MaxQtyWholesale: maxWholesale,
+          ItemCode: {
+            Id: code.Id,
+            CreatedAt: code.CreatedAt,
+            DeletedAt: code.DeletedAt,
+            Weight: code.Weight,
+            AllowItemCodeSelection: code.AllowItemCodeSelection,
+            MinOrderQuantity: code.MinOrderQuantity,
+            QtyPO: code.QtyPO,
+            OrderStep: code.OrderStep,
+            PartNumberId: code.PartNumberId,
+            PartNumber: code.PartNumber,
+            ...(allow ? { Name: code.Name } : {})
+          }
+        };
+      }))
     };
-  }))
-};
 
     res.status(200).json({
       message: "Cart retrieved successfully.",
