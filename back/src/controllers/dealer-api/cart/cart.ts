@@ -252,16 +252,7 @@ export const addUpdateCart = async (req: Request, res: Response): Promise<void> 
         });
         return;
       }
-      // Hapus CartItem lain pada partnumber selain yang terpilih
-      for (const ci of cart.CartItems) {
-        if (
-          ci.ItemCode.PartNumberId === requestItem.PartNumberId &&
-          ci.ItemCodeId !== requestItem.Id &&
-          ci.ItemCode.AllowItemCodeSelection === false
-        ) {
-          await prisma.cartItem.delete({ where: { Id: ci.Id } });
-        }
-      }
+
       await prisma.cartItem.create({
         data: { CartId: cart.Id, ItemCodeId: requestItem.Id, Quantity }
       });
@@ -447,13 +438,14 @@ export const addUpdateCart = async (req: Request, res: Response): Promise<void> 
 
     // Hapus CartItem lain pada partnumber selain yang terpilih
     for (const ci of cart.CartItems) {
-      if (
-        ci.ItemCode.PartNumberId === partNumberId &&
-        ci.ItemCodeId !== best.ItemCodeId
-      ) {
-        await prisma.cartItem.delete({ where: { Id: ci.Id } });
-      }
-    }
+  if (
+    ci.ItemCode.PartNumberId === partNumberId &&
+    ci.ItemCodeId !== best.ItemCodeId &&
+    ci.ItemCode.AllowItemCodeSelection === false // <-- hanya false yang boleh dihapus
+  ) {
+    await prisma.cartItem.delete({ where: { Id: ci.Id } });
+  }
+}
 
     // Tambah ke cart
     await prisma.cartItem.create({
