@@ -175,26 +175,14 @@ export const convertCartToSalesOrder = async (req: Request, res: Response): Prom
 
 
 
-    // 2. Alokasikan stok per partnumber, urut warehouse dealer
-    for (const [partNumberId, { quantity, displayItemCodeId, allowSelection, itemCodeId }] of partNumberCartMap.entries()) {
-      if (allowSelection) {
-        // Ambil itemCode yang diminta
-        const itemCode = await prisma.itemCode.findUnique({
-          where: { Id: itemCodeId, DeletedAt: null },
-          include: { WarehouseStocks: true }
-        });
+    const allowFalseQtyPerPartnumber = new Map<number, number>();
 
-        if (!itemCode) {
-          res.status(400).json({ message: `ItemCode ${itemCodeId} tidak ditemukan.` });
-          return;
-        }
+    for (const cartItem of cart.CartItems) {
+      const itemCode = cartItem.ItemCode;
+      const quantity = cartItem.Quantity;
+      const partNumberId = itemCode.PartNumberId;
 
-        if (itemCode.MinOrderQuantity && quantity < itemCode.MinOrderQuantity) {
-          res.status(400).json({ message: `Item ${itemCode.Name} minimal order ${itemCode.MinOrderQuantity}.` });
-          return;
-        }
-
-        // Urutkan warehouse berdasarkan prioritas dealer
+      if (itemCode.AllowItemCodeSelection) {
         const dealerWarehouses = await prisma.dealerWarehouse.findMany({
           where: { DealerId: dealer.Id },
           orderBy: { Priority: "asc" },
@@ -202,128 +190,23 @@ export const convertCartToSalesOrder = async (req: Request, res: Response): Prom
         });
         const priorityWarehouseIds = dealerWarehouses.map(dw => dw.WarehouseId);
 
-        // 1. CEK STOK TOTAL AKUMULASI
-        const totalAvailableStock = itemCode.WarehouseStocks
-          .filter(ws => ws.WarehouseId && ws.QtyOnHand > 0)
-          .reduce((sum, ws) => sum + ws.QtyOnHand, 0);
-
-        if (quantity > totalAvailableStock) {
-          res.status(400).json({
-            message: `Permintaan melebihi stok! ItemCode ${itemCode.Name} membutuhkan ${quantity}, stok tersedia ${totalAvailableStock}.`
-          });
-          return;
-        }
-
-        // 2. Proses alokasi multi warehouse sesuai prioritas
-        let qtyRemaining = quantity;
-        let lastAllocatedDetail = null;
-        for (const warehouseId of priorityWarehouseIds) {
-          if (qtyRemaining <= 0) break;
-
-          const ws = itemCode.WarehouseStocks.find(s => s.WarehouseId === warehouseId && s.QtyOnHand > 0);
-          if (!ws) continue;
-
-          const ambil = Math.min(qtyRemaining, ws.QtyOnHand);
-
-          // Harga & Pajak
-          const itemPrices = await prisma.price.findMany({
-            where: { ItemCodeId: itemCodeId, DeletedAt: null },
-            include: { WholesalePrices: { where: { DeletedAt: null } } }
-          });
-          const resolved = resolvePrice(itemPrices, dealer.Id, dealer.PriceCategoryId, ambil);
-          let priceFinal = resolved.price && resolved.price !== 0 ? resolved.price : null;
-          let tax = null, taxRate = 0, finalPrice = null, taxId = null;
-
-          if (priceFinal !== null) {
-            tax = await prisma.tax.findFirst({
-              where: { IsActive: true },
-              orderBy: { CreatedAt: "desc" }
-            });
-            taxRate = tax?.Percentage ?? 0;
-            finalPrice = Math.round(priceFinal * (1 + taxRate / 100));
-            taxId = tax?.Id ?? null;
-          } else {
-            priceFinal = 0;
-            finalPrice = 0;
-            taxId = null;
-            taxRate = 0;
-          }
-
-          salesOrderDetails.push({
-            SalesOrderId: newSalesOrder.Id,
-            ItemCodeId: itemCodeId,
-            WarehouseId: warehouseId,
-            Quantity: ambil,
-            Price: priceFinal,
-            FinalPrice: finalPrice,
-            PriceCategoryId: dealer.PriceCategoryId,
-            FulfillmentStatus: FulfillmentStatus.READY,
-            TaxId: taxId,
-          });
-          lastAllocatedDetail = salesOrderDetails[salesOrderDetails.length - 1];
-          qtyRemaining -= ambil;
-        }
-
-        // **Fallback:** Kalau qtyRemaining > 0, tambahkan ke detail terakhir (harusnya tidak terjadi, karena stok sudah dicek)
-        if (qtyRemaining > 0) {
-          if (lastAllocatedDetail) {
-            lastAllocatedDetail.Quantity += qtyRemaining;
-          } else {
-            res.status(400).json({ message: `Stok tidak cukup untuk ItemCode ${itemCode.Name} (kurang ${qtyRemaining}).` });
-            return;
-          }
-        }
-      } else {
-        // =======================
-        // 2. Jika ItemCodeSelection = FALSE (alokasi stok ke banyak warehouse)
-        // =======================
+        // Semua itemCode satu partnumber (tanpa hardcode), include stok di semua warehouse
         const allItemCodes = await prisma.itemCode.findMany({
-          where: { PartNumberId: partNumberId, AllowItemCodeSelection: false, DeletedAt: null },
+          where: { PartNumberId: itemCode.PartNumberId, DeletedAt: null },
           include: { WarehouseStocks: true }
         });
 
-        // Cek minimal order (bisa pakai dari anyItemCode)
-        const anyItemCode = allItemCodes[0];
-        if (anyItemCode && anyItemCode.MinOrderQuantity && quantity < anyItemCode.MinOrderQuantity) {
-          res.status(400).json({ message: `Item ${anyItemCode.Name} minimal order ${anyItemCode.MinOrderQuantity}.` });
-          return;
-        }
-
-        // 1. CEK STOK TOTAL AKUMULASI
-        const totalAvailableStock = allItemCodes.reduce((sum, ic) =>
-          sum + ic.WarehouseStocks.reduce((s, ws) => s + (ws.QtyOnHand > 0 ? ws.QtyOnHand : 0), 0), 0);
-        if (quantity > totalAvailableStock) {
-          res.status(400).json({
-            message: `Permintaan melebihi stok! Partnumber ${partNumberId} membutuhkan ${quantity}, stok tersedia ${totalAvailableStock}.`
-          });
-          return;
-        }
-
-        // Urutkan warehouse berdasarkan prioritas dealer
-        const dealerWarehouses = await prisma.dealerWarehouse.findMany({
-          where: { DealerId: dealer.Id },
-          orderBy: { Priority: 'asc' },
-          select: { WarehouseId: true }
-        });
-        const priorityWarehouseIds = dealerWarehouses.map(dw => dw.WarehouseId);
-
         let qtyRemaining = quantity;
-        let lastAllocatedDetail: any = null;
 
+        // STEP 1: Habiskan stok dari ItemCode yang diminta user (misal: "BK SJ") di seluruh warehouse sesuai urutan prioritas
         for (const warehouseId of priorityWarehouseIds) {
           if (qtyRemaining <= 0) break;
-          const itemCodesThisWarehouse = allItemCodes
-            .map(ic => {
-              const ws = ic.WarehouseStocks.find(s => s.WarehouseId === warehouseId && s.QtyOnHand > 0);
-              return ws ? { itemCode: ic, stock: ws.QtyOnHand } : undefined;
-            })
-            .filter((v): v is { itemCode: typeof allItemCodes[0], stock: number } => v !== undefined);
 
-          for (const { itemCode, stock } of itemCodesThisWarehouse) {
-            if (qtyRemaining <= 0) break;
-            const ambil = Math.min(qtyRemaining, stock);
-
-            // Harga, pajak, dsb
+          // 1. Habiskan stok BK SJ (itemCode utama) di gudang ini
+          const wsMain = itemCode.WarehouseStocks.find(w => w.WarehouseId === warehouseId && w.QtyOnHand > 0);
+          if (wsMain && qtyRemaining > 0) {
+            const ambil = Math.min(qtyRemaining, wsMain.QtyOnHand);
+            // ... proses create detail seperti biasa (copy paste dari kode kamu)
             const itemPrices = await prisma.price.findMany({
               where: { ItemCodeId: itemCode.Id, DeletedAt: null },
               include: { WholesalePrices: { where: { DeletedAt: null } } }
@@ -358,20 +241,237 @@ export const convertCartToSalesOrder = async (req: Request, res: Response): Prom
               FulfillmentStatus: FulfillmentStatus.READY,
               TaxId: taxId,
             });
-            lastAllocatedDetail = salesOrderDetails[salesOrderDetails.length - 1];
+
             qtyRemaining -= ambil;
+          }
+
+          // 2. Jika masih kurang, lanjutkan ambil dari itemCode lain DI GUDANG YANG SAMA sebelum pindah gudang berikutnya
+          if (qtyRemaining > 0) {
+            // Semua itemCode lain (kecuali itemCode utama)
+            const otherItemCodes = allItemCodes.filter(ic => ic.Id !== itemCode.Id);
+
+            // Urutkan per stok terbanyak DI GUDANG INI
+            const sortedItemCodes = otherItemCodes
+              .map(ic => {
+                const ws = ic.WarehouseStocks.find(w => w.WarehouseId === warehouseId && w.QtyOnHand > 0);
+                return ws ? { itemCode: ic, stock: ws.QtyOnHand, ws } : null;
+              })
+              .filter(Boolean)
+              .sort((a, b) => b!.stock - a!.stock);
+
+            for (const entry of sortedItemCodes) {
+              if (qtyRemaining <= 0) break;
+              const { itemCode: ic, stock, ws } = entry!;
+
+              const ambil = Math.min(qtyRemaining, stock);
+
+              // Harga & tax
+              const itemPrices = await prisma.price.findMany({
+                where: { ItemCodeId: ic.Id, DeletedAt: null },
+                include: { WholesalePrices: { where: { DeletedAt: null } } }
+              });
+              const resolved = resolvePrice(itemPrices, dealer.Id, dealer.PriceCategoryId, ambil);
+              let priceFinal = resolved.price && resolved.price !== 0 ? resolved.price : null;
+              let tax = null, taxRate = 0, finalPrice = null, taxId = null;
+
+              if (priceFinal !== null) {
+                tax = await prisma.tax.findFirst({
+                  where: { IsActive: true },
+                  orderBy: { CreatedAt: "desc" }
+                });
+                taxRate = tax?.Percentage ?? 0;
+                finalPrice = Math.round(priceFinal * (1 + taxRate / 100));
+                taxId = tax?.Id ?? null;
+              } else {
+                priceFinal = 0;
+                finalPrice = 0;
+                taxId = null;
+                taxRate = 0;
+              }
+
+              salesOrderDetails.push({
+                SalesOrderId: newSalesOrder.Id,
+                ItemCodeId: ic.Id,
+                WarehouseId: warehouseId,
+                Quantity: ambil,
+                Price: priceFinal,
+                FinalPrice: finalPrice,
+                PriceCategoryId: dealer.PriceCategoryId,
+                FulfillmentStatus: FulfillmentStatus.READY,
+                TaxId: taxId,
+              });
+
+              qtyRemaining -= ambil;
+            }
           }
         }
 
         if (qtyRemaining > 0) {
-          if (lastAllocatedDetail) {
-            lastAllocatedDetail.Quantity += qtyRemaining;
-            qtyRemaining = 0;
-          } else {
-            res.status(400).json({ message: `Stok tidak cukup untuk partnumber ${partNumberId} (kurang ${qtyRemaining}).` });
-            return;
+          throw new Error(`Stok tidak cukup untuk partnumber ${itemCode.PartNumberId}`);
+        }
+
+        // STEP 2: Jika masih kurang, baru ambil dari ItemCode lain (dalam partnumber sama) urut warehouse prioritas dan stok terbanyak per warehouse
+        if (qtyRemaining > 0) {
+          for (const warehouseId of priorityWarehouseIds) {
+            if (qtyRemaining <= 0) break;
+
+            // Semua itemCode lain (kecuali itemCode utama)
+            const otherItemCodes = allItemCodes.filter(ic => ic.Id !== itemCode.Id);
+
+            // Urutkan per stok terbanyak di warehouse tsb
+            const sortedItemCodes = otherItemCodes
+              .map(ic => {
+                const ws = ic.WarehouseStocks.find(w => w.WarehouseId === warehouseId && w.QtyOnHand > 0);
+                return ws ? { itemCode: ic, stock: ws.QtyOnHand, ws } : null;
+              })
+              .filter(Boolean)
+              .sort((a, b) => b!.stock - a!.stock);
+
+            for (const entry of sortedItemCodes) {
+              if (qtyRemaining <= 0) break;
+              const { itemCode: ic, stock, ws } = entry!;
+
+              const ambil = Math.min(qtyRemaining, stock);
+
+              // Harga & tax
+              const itemPrices = await prisma.price.findMany({
+                where: { ItemCodeId: ic.Id, DeletedAt: null },
+                include: { WholesalePrices: { where: { DeletedAt: null } } }
+              });
+              const resolved = resolvePrice(itemPrices, dealer.Id, dealer.PriceCategoryId, ambil);
+              let priceFinal = resolved.price && resolved.price !== 0 ? resolved.price : null;
+              let tax = null, taxRate = 0, finalPrice = null, taxId = null;
+
+              if (priceFinal !== null) {
+                tax = await prisma.tax.findFirst({
+                  where: { IsActive: true },
+                  orderBy: { CreatedAt: "desc" }
+                });
+                taxRate = tax?.Percentage ?? 0;
+                finalPrice = Math.round(priceFinal * (1 + taxRate / 100));
+                taxId = tax?.Id ?? null;
+              } else {
+                priceFinal = 0;
+                finalPrice = 0;
+                taxId = null;
+                taxRate = 0;
+              }
+
+              salesOrderDetails.push({
+                SalesOrderId: newSalesOrder.Id,
+                ItemCodeId: ic.Id,
+                WarehouseId: warehouseId,
+                Quantity: ambil,
+                Price: priceFinal,
+                FinalPrice: finalPrice,
+                PriceCategoryId: dealer.PriceCategoryId,
+                FulfillmentStatus: FulfillmentStatus.READY,
+                TaxId: taxId,
+              });
+
+              qtyRemaining -= ambil;
+            }
           }
         }
+
+        if (qtyRemaining > 0) {
+          throw new Error(`Stok tidak cukup untuk partnumber ${itemCode.PartNumberId}`);
+        }
+      } else {
+        // ... (blok allow:false tetap pakai urutan stok terbesar, tidak usah diubah)
+        if (partNumberId != null) {
+          if (!allowFalseQtyPerPartnumber.has(partNumberId)) {
+            allowFalseQtyPerPartnumber.set(partNumberId, 0);
+          }
+          allowFalseQtyPerPartnumber.set(partNumberId, allowFalseQtyPerPartnumber.get(partNumberId)! + quantity);
+        }
+      }
+    }
+
+    // Setelah loop, proses Allow:false per partnumber
+    for (const [partNumberId, quantity] of allowFalseQtyPerPartnumber.entries()) {
+
+      const allItemCodes = (
+        await prisma.itemCode.findMany({
+          where: { PartNumberId: partNumberId, DeletedAt: null },
+          include: { WarehouseStocks: true }
+        })
+      )
+        .map(ic => ({
+          ...ic,
+          totalStock: ic.WarehouseStocks.reduce((a, b) => a + (b.QtyOnHand > 0 ? b.QtyOnHand : 0), 0)
+        }))
+        .sort((a, b) => b.totalStock - a.totalStock);
+
+      console.log(
+        '[ALLITEMCODES] sorted =',
+        allItemCodes.map(x => ({ name: x.Name, totalStock: x.totalStock }))
+      );
+      const dealerWarehouses = await prisma.dealerWarehouse.findMany({
+        where: { DealerId: dealer.Id },
+        orderBy: { Priority: "asc" },
+        select: { WarehouseId: true }
+      });
+      const priorityWarehouseIds = dealerWarehouses.map(dw => dw.WarehouseId);
+
+      let qtyRemaining = quantity;
+      for (const warehouseId of priorityWarehouseIds) {
+        if (qtyRemaining <= 0) break;
+
+        // --- Patch: Urutkan itemCodesThisWarehouse dari stok terbanyak ---
+        const itemCodesThisWarehouse = allItemCodes
+          .map(ic => {
+            const ws = ic.WarehouseStocks.find(s => s.WarehouseId === warehouseId && s.QtyOnHand > 0);
+            return ws ? { itemCode: ic, stock: ws.QtyOnHand } : undefined;
+          })
+          .filter((v): v is { itemCode: typeof allItemCodes[0], stock: number } => v !== undefined)
+          .sort((a, b) => b.stock - a.stock);
+
+
+        for (const { itemCode, stock } of itemCodesThisWarehouse) {
+          if (qtyRemaining <= 0) break;
+          const ambil = Math.min(qtyRemaining, stock);
+
+          const itemPrices = await prisma.price.findMany({
+            where: { ItemCodeId: itemCode.Id, DeletedAt: null },
+            include: { WholesalePrices: { where: { DeletedAt: null } } }
+          });
+          const resolved = resolvePrice(itemPrices, dealer.Id, dealer.PriceCategoryId, ambil);
+          let priceFinal = resolved.price && resolved.price !== 0 ? resolved.price : null;
+          let tax = null, taxRate = 0, finalPrice = null, taxId = null;
+
+          if (priceFinal !== null) {
+            tax = await prisma.tax.findFirst({
+              where: { IsActive: true },
+              orderBy: { CreatedAt: "desc" }
+            });
+            taxRate = tax?.Percentage ?? 0;
+            finalPrice = Math.round(priceFinal * (1 + taxRate / 100));
+            taxId = tax?.Id ?? null;
+          } else {
+            priceFinal = 0;
+            finalPrice = 0;
+            taxId = null;
+            taxRate = 0;
+          }
+
+          salesOrderDetails.push({
+            SalesOrderId: newSalesOrder.Id,
+            ItemCodeId: itemCode.Id,
+            WarehouseId: warehouseId,
+            Quantity: ambil,
+            Price: priceFinal,
+            FinalPrice: finalPrice,
+            PriceCategoryId: dealer.PriceCategoryId,
+            FulfillmentStatus: FulfillmentStatus.READY,
+            TaxId: taxId,
+          });
+          console.log(`[SO Detail] Part: ${partNumberId}, ChosenItemCode: ${itemCode.Name}, Qty: ${ambil}, WH: ${warehouseId}`);
+          qtyRemaining -= ambil;
+        }
+      }
+      if (qtyRemaining > 0) {
+        throw new Error(`Stok tidak cukup untuk partnumber ${partNumberId} (kurang ${qtyRemaining})`);
       }
     }
 

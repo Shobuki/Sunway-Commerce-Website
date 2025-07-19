@@ -1,4 +1,4 @@
-import React, { useRef,useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import axios from "@/utils/axios";
 import EditStock from './EditStock';
 import WarehouseItemCode from './WarehouseItemCode';
@@ -66,7 +66,7 @@ const Stock = () => {
             const params = {};
             if (sortBy) params.sortBy = sortBy; // ✅ Kirim hanya jika ada nilai
 
-            const response = await axios.post("/api/admin/admin/products/stock", { params });
+            const response = await axios.post("/api/admin/admin/products/stock");
 
             if (response.status === 200) {
                 setStockData(response.data.data);
@@ -86,13 +86,8 @@ const Stock = () => {
     // ✅ Fetch Data dari API
     useEffect(() => {
         fetchStockData();
-    }, [sortBy]); // ✅ Fetch ulang saat sortBy berubah
+    }, []); // ✅ Fetch ulang saat sortBy berubah
 
-    useEffect(() => {
-        setPage(1);
-    }, [searchTerm, selectedCategory, selectedProduct, selectedPartNumber, sortBy]);
-
-    const tableRef = useRef(null);
 
     // ✅ Dapatkan semua item code yang unik dari data stock
     const allItemCodes = [
@@ -112,50 +107,71 @@ const Stock = () => {
         : stockData;
 
 
-    const filteredProducts = filteredProductsByCategory
-        .filter((product) => {
-            if (selectedProduct && product.Name !== selectedProduct) return false;
-            return true;
-        })
-        .map((product) => {
-            let filteredPartNumbers = product.PartNumber;
-
-            // Filter part number jika dipilih
-            if (selectedPartNumber) {
-                filteredPartNumbers = filteredPartNumbers.filter(part => part.Name === selectedPartNumber);
-            }
-
-            // Filter searchTerm
-            if (searchTerm) {
-                const lowerSearch = searchTerm.toLowerCase();
-
-                if (sortBy === "partnumber") {
+    let filteredProducts = [];
+    if (sortBy === "product") {
+        filteredProducts = filteredProductsByCategory
+            .filter(product => {
+                if (selectedProduct && product.Name !== selectedProduct) return false;
+                if (searchTerm && !product.Name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+                return true;
+            })
+            .map(product => ({
+                ...product,
+                PartNumber: product.PartNumber // tanpa filter
+            }));
+    }
+    else if (sortBy === "partnumber") {
+        filteredProducts = filteredProductsByCategory
+            .filter(product => {
+                if (selectedProduct && product.Name !== selectedProduct) return false;
+                return true;
+            })
+            .map(product => {
+                let filteredPartNumbers = product.PartNumber;
+                // Tambah filter selectedPartNumber sebelum searchTerm biar urut
+                if (selectedPartNumber) {
+                    filteredPartNumbers = filteredPartNumbers.filter(part => part.Name === selectedPartNumber);
+                }
+                if (searchTerm) {
                     filteredPartNumbers = filteredPartNumbers.filter(part =>
-                        part.Name.toLowerCase().includes(lowerSearch)
+                        part.Name.toLowerCase().includes(searchTerm.toLowerCase())
                     );
                 }
-
-                if (sortBy === "itemcode") {
-                    filteredPartNumbers = filteredPartNumbers
-                        .map((part) => ({
-                            ...part,
-                            ItemCode: part.ItemCode.filter((item) =>
-                                item.Name.toLowerCase().includes(lowerSearch)
-                            ),
-                        }))
-                        .filter((part) => part.ItemCode.length > 0);
+                if (filteredPartNumbers.length === 0) return null;
+                return { ...product, PartNumber: filteredPartNumbers };
+            })
+            .filter(Boolean);
+    }
+    else if (sortBy === "itemcode") {
+        filteredProducts = filteredProductsByCategory
+            .filter(product => {
+                if (selectedProduct && product.Name !== selectedProduct) return false;
+                return true;
+            })
+            .map(product => {
+                // 1. filter partnumber kalau dipilih
+                let filteredPartNumbers = product.PartNumber;
+                if (selectedPartNumber) {
+                    filteredPartNumbers = filteredPartNumbers.filter(part => part.Name === selectedPartNumber);
                 }
-            }
+                // 2. filter item code kalau ada searchTerm
+                filteredPartNumbers = filteredPartNumbers
+                    .map(part => {
+                        let filteredItemCodes = part.ItemCode;
+                        if (searchTerm) {
+                            filteredItemCodes = filteredItemCodes.filter(item =>
+                                item.Name.toLowerCase().includes(searchTerm.toLowerCase())
+                            );
+                        }
+                        return { ...part, ItemCode: filteredItemCodes };
+                    })
+                    .filter(part => part.ItemCode.length > 0); // pastikan part yang sudah kosong dihapus
 
-            if (filteredPartNumbers.length === 0) return null;
-
-            return {
-                ...product,
-                PartNumber: filteredPartNumbers,
-            };
-        })
-        .filter(Boolean);
-
+                if (filteredPartNumbers.length === 0) return null;
+                return { ...product, PartNumber: filteredPartNumbers };
+            })
+            .filter(Boolean);
+    }
 
 
     const sortedProducts = filteredProducts.slice().sort((a, b) => {
@@ -452,7 +468,7 @@ const Stock = () => {
 
 
     return (
-        <div className="p-4 mx-auto max-w-7xl md:ml-60">
+        <div className="p-4 mx-auto max-w-7xl ml-60">
             <div className="flex justify-between items-center mb-4">
                 <h1 className="text-3xl font-bold mb-4">🏢 Stock Management</h1>
 
@@ -555,7 +571,8 @@ const Stock = () => {
             </div>
 
             {/* Table Section */}
-            <div ref={tableRef} className="overflow-x-auto rounded-lg border hidden md:block">
+            <div className="overflow-x-auto rounded-lg border">
+
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
@@ -569,75 +586,71 @@ const Stock = () => {
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {paginatedProducts.map((product) => (
-                            <React.Fragment key={product.Id}>
-                                <tr className="bg-blue-50 font-semibold">
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        {product.ProductCategory.map((cat) => cat.Name).join(", ")}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{product.Name}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap"></td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-
-                                    </td>
-                                </tr>
-
-                                {product.PartNumber.flatMap((part) =>
-                                    part.ItemCode.map((item, index) => (
-                                        <tr key={index} className="text-sm text-gray-600">
-                                            <td className="px-6 py-2"></td>
-                                            <td className="px-6 py-2"></td>
-                                            <td className="px-6 py-2 pl-8">{part.Name}</td>
-                                            <td className="px-6 py-2">{item.Name}</td>
-                                            <td className="px-6 py-2">
-                                                {item.WarehouseStocks && item.WarehouseStocks.length > 0 ? (
-                                                    <div className="space-y-1">
-                                                        {item.WarehouseStocks.map((ws, idx) => (
-                                                            <div key={idx} className="flex justify-between text-xs text-gray-800">
-                                                                <span>{ws.Warehouse?.Name || "Unknown"}:</span>
-                                                                <span className="font-medium">{ws.QtyOnHand}</span>
+                        {paginatedProducts.map((product) =>
+                            product.PartNumber.length === 0 ? null : (
+                                <React.Fragment key={product.Id}>
+                                    <tr className="bg-blue-50 font-semibold">
+                                        <td>{product.ProductCategory.map((cat) => cat.Name).join(", ")}</td>
+                                        <td>{product.Name}</td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                    </tr>
+                                    {product.PartNumber
+                                        .filter(part => part.ItemCode && part.ItemCode.length > 0) // <--- Tambah filter ini
+                                        .flatMap((part) =>
+                                            part.ItemCode.map((item, index) => (
+                                                <tr key={index}>
+                                                    <td></td>
+                                                    <td></td>
+                                                    <td className="pl-8">{part.Name}</td>
+                                                    <td>{item.Name}</td>
+                                                    <td className="px-6 py-2">
+                                                        {item.WarehouseStocks && item.WarehouseStocks.length > 0 ? (
+                                                            <div className="space-y-1">
+                                                                {item.WarehouseStocks.map((ws, idx) => (
+                                                                    <div key={idx} className="flex justify-between text-xs text-gray-800">
+                                                                        <span>{ws.Warehouse?.Name || "Unknown"}:</span>
+                                                                        <span className="font-medium">{ws.QtyOnHand}</span>
+                                                                    </div>
+                                                                ))}
                                                             </div>
-                                                        ))}
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-gray-400 text-sm italic">No Stock</span>
-                                                )}
-                                            </td>
+                                                        ) : (
+                                                            <span className="text-gray-400 text-sm italic">No Stock</span>
+                                                        )}
+                                                    </td>
 
-                                            <td className="px-6 py-2">{item.QtyPO || 0}</td>
-                                            <td className="px-6 py-2">
-                                                {hasFeatureAccess(menuAccess, "editstockmanual") && (
-                                                    <>
-                                                        <button
-                                                            onClick={() => setSelectedItem(item)}
-                                                            className="px-3 py-1 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 text-sm mr-2"
-                                                        >
-                                                            Edit
-                                                        </button>
-                                                    </>
-                                                )}
-                                                {hasFeatureAccess(menuAccess, "managewarehouse") && (
-                                                    <>
-                                                        <button
-                                                            onClick={() => {
-                                                                setSelectedItemCode(item);
-                                                                setWarehouseItemCodeOpen(true);
-                                                            }}
-                                                            className="px-3 py-1 bg-orange-100 text-orange-600 rounded-lg hover:bg-orange-200 text-sm"
-                                                        >
-                                                            Warehouse
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </React.Fragment>
-                        ))}
+                                                    <td className="px-6 py-2">{item.QtyPO || 0}</td>
+                                                    <td className="px-6 py-2">
+                                                        {hasFeatureAccess(menuAccess, "editstockmanual") && (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => setSelectedItem(item)}
+                                                                    className="px-3 py-1 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 text-sm mr-2"
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                        {hasFeatureAccess(menuAccess, "managewarehouse") && (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setSelectedItemCode(item);
+                                                                        setWarehouseItemCodeOpen(true);
+                                                                    }}
+                                                                    className="px-3 py-1 bg-orange-100 text-orange-600 rounded-lg hover:bg-orange-200 text-sm"
+                                                                >
+                                                                    Warehouse
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                </React.Fragment>
+                            ))}
                     </tbody>
                 </table>
                 <div className="flex justify-between items-center py-3">
@@ -648,93 +661,28 @@ const Stock = () => {
                         {" of "}
                         {totalRows}
                     </div>
-                    <div className="flex gap-1 w-[200px] justify-end">
-                        <button className="px-2 py-1 border rounded disabled:opacity-40" disabled={page === 1} onClick={() => setPage(1)}>{"<<"}</button>
-                        <button className="px-2 py-1 border rounded disabled:opacity-40" disabled={page === 1} onClick={() => setPage(page - 1)}>{"<"}</button>
-                        <span className="px-2 py-1 min-w-[30px] text-center">{page}/{totalPages}</span>
-                        <button className="px-2 py-1 border rounded disabled:opacity-40" disabled={page === totalPages} onClick={() => setPage(page + 1)}>{">"}</button>
-                        <button className="px-2 py-1 border rounded disabled:opacity-40" disabled={page === totalPages} onClick={() => setPage(totalPages)}>{">>"}</button>
-                    </div>
-                </div>
-            </div>
-            {/* Mobile Card List */}
-            <div className="space-y-3 md:hidden">
-                {paginatedProducts.map((product) => (
-                    <React.Fragment key={product.Id}>
-                        {product.PartNumber.flatMap((part) =>
-                            part.ItemCode.map((item, index) => (
-                                <div key={index} className="border rounded-lg p-3 shadow bg-white flex flex-col gap-1">
-                                    <div className="flex justify-between items-center mb-1">
-                                        <div>
-                                            <div className="font-bold text-blue-900 text-base">{product.Name}</div>
-                                            <div className="text-xs text-gray-600 mb-1">{product.ProductCategory.map((cat) => cat.Name).join(", ")}</div>
-                                        </div>
-                                        <div className="text-xs text-gray-500 font-semibold">{part.Name}</div>
-                                    </div>
-                                    <div className="flex justify-between text-sm mb-1">
-                                        <span className="text-gray-800 font-medium">{item.Name}</span>
-                                        <span className="text-gray-500">Item Code</span>
-                                    </div>
-                                    <div className="mb-1">
-                                        <div className="text-xs text-gray-500 mb-1">Stock per Gudang:</div>
-                                        <div className="space-y-1">
-                                            {item.WarehouseStocks && item.WarehouseStocks.length > 0 ? (
-                                                item.WarehouseStocks.map((ws, idx) => (
-                                                    <div key={idx} className="flex justify-between text-xs text-gray-800">
-                                                        <span>{ws.Warehouse?.Name || "Unknown"}:</span>
-                                                        <span className="font-bold">{ws.QtyOnHand}</span>
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <span className="text-gray-400 text-xs italic">No Stock</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex justify-between text-xs text-gray-700 mb-2">
-                                        <span>QtyPO:</span>
-                                        <span className="font-semibold">{item.QtyPO || 0}</span>
-                                    </div>
-                                    <div className="flex gap-2 mt-2">
-                                        {hasFeatureAccess(menuAccess, "editstockmanual") && (
-                                            <button
-                                                onClick={() => setSelectedItem(item)}
-                                                className="flex-1 px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-xs"
-                                            >
-                                                Edit
-                                            </button>
-                                        )}
-                                        {hasFeatureAccess(menuAccess, "managewarehouse") && (
-                                            <button
-                                                onClick={() => {
-                                                    setSelectedItemCode(item);
-                                                    setWarehouseItemCodeOpen(true);
-                                                }}
-                                                className="flex-1 px-2 py-1 bg-orange-100 text-orange-700 rounded hover:bg-orange-200 text-xs"
-                                            >
-                                                Warehouse
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </React.Fragment>
-                ))}
-                {/* Pagination Mobile */}
-                <div className="flex justify-between items-center py-3">
-                    <div className="text-sm">
-                        Showing {Math.min((page - 1) * perPage + 1, totalRows)}
-                        {"–"}
-                        {Math.min(page * perPage, totalRows)}
-                        {" of "}
-                        {totalRows}
-                    </div>
-                    <div className="flex gap-1 w-[150px] justify-end">
-                        <button className="px-2 py-1 border rounded disabled:opacity-40" disabled={page === 1} onClick={() => setPage(1)}>{"<<"}</button>
-                        <button className="px-2 py-1 border rounded disabled:opacity-40" disabled={page === 1} onClick={() => setPage(page - 1)}>{"<"}</button>
-                        <span className="px-2 py-1 min-w-[30px] text-center">{page}/{totalPages}</span>
-                        <button className="px-2 py-1 border rounded disabled:opacity-40" disabled={page === totalPages} onClick={() => setPage(page + 1)}>{">"}</button>
-                        <button className="px-2 py-1 border rounded disabled:opacity-40" disabled={page === totalPages} onClick={() => setPage(totalPages)}>{">>"}</button>
+                    <div className="flex gap-2">
+                        <button
+                            className="px-2 py-1 border rounded disabled:opacity-40"
+                            disabled={page === 1}
+                            onClick={() => setPage(1)}
+                        >{"<<"}</button>
+                        <button
+                            className="px-2 py-1 border rounded disabled:opacity-40"
+                            disabled={page === 1}
+                            onClick={() => setPage(page - 1)}
+                        >{"<"}</button>
+                        <span className="px-2 py-1">{page}/{totalPages}</span>
+                        <button
+                            className="px-2 py-1 border rounded disabled:opacity-40"
+                            disabled={page === totalPages}
+                            onClick={() => setPage(page + 1)}
+                        >{">"}</button>
+                        <button
+                            className="px-2 py-1 border rounded disabled:opacity-40"
+                            disabled={page === totalPages}
+                            onClick={() => setPage(totalPages)}
+                        >{">>"}</button>
                     </div>
                 </div>
             </div>
