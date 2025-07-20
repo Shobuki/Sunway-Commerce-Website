@@ -546,14 +546,13 @@ const ApprovalSalesOrder: React.FC = () => {
           order.Id === selectedOrder?.Id ? { ...order, Status: "APPROVED_EMAIL_SENT" } : order
         )
       );
-    } catch (error: any) {
-      // Ambil message dari response error API
-      let msg = "Approval gagal.";
-      if (error.response && error.response.data && error.response.data.message) {
-        msg = error.response.data.message;
+    } catch (error) {
+      console.error("Error updating Sales Order:", error);
+      if (error instanceof Error) {
+        setApproveMessage(error.message);
+      } else {
+        setApproveMessage("Unknown error occurred during approval.");
       }
-      setApproveMessage(msg);
-      console.error("Approval failed:", error);
     } finally {
       setApproveLoading(false);
       setShowModal(false);
