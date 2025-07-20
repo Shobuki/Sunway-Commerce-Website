@@ -748,10 +748,15 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
     console.log("========= END DEBUG ==========");
   } catch (error) {
     console.error("Error approving Sales Order:", error);
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message, stack: error.stack, detail: error });
+    if (!res.headersSent) {
+      if (error instanceof Error) {
+        res.status(500).json({ message: error.message, stack: error.stack, detail: error });
+      } else {
+        res.status(500).json({ message: "Unknown error", detail: error });
+      }
     } else {
-      res.status(500).json({ message: "Unknown error", detail: error });
+      // Sudah ada response sebelumnya, tidak perlu balas lagi
+      console.error("Post-response error (sudah ada response):", error);
     }
   }
 };
