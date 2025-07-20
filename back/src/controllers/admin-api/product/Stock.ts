@@ -5,109 +5,78 @@ const prisma = new PrismaClient();
 
 class WarehouseStock {
   getStockData = async (req: Request, res: Response) => {
-    try {
-      let { page, perPage, sortBy, filterProduct, filterPartNumber, filterItemCode } = req.query;
+  try {
+    let { sortBy, filterProduct, filterPartNumber, filterItemCode } = req.query;
 
-      const currentPage = parseInt(page as string) || 1;
-      const limit = Math.min(parseInt(perPage as string) || 40, 40);
-      const offset = (currentPage - 1) * limit;
+    let orderBy = {};
+    if (sortBy === "product") {
+      orderBy = { Name: "asc" };
+    } else if (sortBy === "partnumber_itemcode") {
+      orderBy = {
+        PartNumber: {
+          Name: "asc",
+        },
+      };
+    }
 
-      let orderBy = {};
-      if (sortBy === "product") {
-        orderBy = { Name: "asc" };
-      } else if (sortBy === "partnumber_itemcode") {
-        orderBy = {
-          PartNumber: {
-            Name: "asc",
-          },
-        };
-      }
-
-      const stockData = await prisma.product.findMany({
-        where: {
-          DeletedAt: null,
-          Name: filterProduct ? { contains: filterProduct as string, mode: "insensitive" } : undefined,
-          PartNumber: {
-            some: {
-              DeletedAt: null,
-              Name: filterPartNumber ? { contains: filterPartNumber as string, mode: "insensitive" } : undefined,
-              ItemCode: filterItemCode
-                ? {
-                  some: {
-                    DeletedAt: null,
-                    Name: { contains: filterItemCode as string, mode: "insensitive" },
-                  },
-                }
-                : undefined,
-            },
+    const stockData = await prisma.product.findMany({
+      where: {
+        DeletedAt: null,
+        Name: filterProduct ? { contains: filterProduct as string, mode: "insensitive" } : undefined,
+        PartNumber: {
+          some: {
+            DeletedAt: null,
+            Name: filterPartNumber ? { contains: filterPartNumber as string, mode: "insensitive" } : undefined,
+            ItemCode: filterItemCode
+              ? {
+                some: {
+                  DeletedAt: null,
+                  Name: { contains: filterItemCode as string, mode: "insensitive" },
+                },
+              }
+              : undefined,
           },
         },
-        include: {
-          PartNumber: {
-            where: {
-              DeletedAt: null,
-            },
-            include: {
-              ItemCode: {
-                where: {
-                  DeletedAt: null,
-                },
-                include: {
-                  // PERBAIKI di sini:
-                  WarehouseStocks: {
-                    where: {
-                      DeletedAt: null,              // Hanya WarehouseStock aktif
-                      Warehouse: { DeletedAt: null } // Hanya warehouse aktif
-                    },
-                    include: {
-                      Warehouse: true,              // Dapatkan detail warehouse
-                    },
+      },
+      include: {
+        PartNumber: {
+          where: {
+            DeletedAt: null,
+          },
+          include: {
+            ItemCode: {
+              where: {
+                DeletedAt: null,
+              },
+              include: {
+                WarehouseStocks: {
+                  where: {
+                    DeletedAt: null,
+                    Warehouse: { DeletedAt: null }
+                  },
+                  include: {
+                    Warehouse: true,
                   },
                 },
               },
             },
           },
-          ProductCategory: true,
         },
-        orderBy,
-        take: limit,
-        skip: offset,
-      });
+        ProductCategory: true,
+      },
+      orderBy,
+      // Tidak pakai take & skip
+    });
 
-      const totalData = await prisma.product.count({
-        where: {
-          DeletedAt: null,
-          Name: filterProduct ? { contains: filterProduct as string, mode: "insensitive" } : undefined,
-          PartNumber: {
-            some: {
-              DeletedAt: null,
-              Name: filterPartNumber ? { contains: filterPartNumber as string, mode: "insensitive" } : undefined,
-              ItemCode: filterItemCode
-                ? {
-                  some: {
-                    DeletedAt: null,
-                    Name: { contains: filterItemCode as string, mode: "insensitive" },
-                  },
-                }
-                : undefined,
-            },
-          },
-        },
-      });
-
-      res.json({
-        message: "Stock data fetched successfully",
-        currentPage,
-        perPage: limit,
-        totalData,
-        totalPages: Math.ceil(totalData / limit),
-        data: stockData,
-      });
-    } catch (error) {
-      console.error("Error fetching stock data:", error);
-      res.status(500).json({ message: "Internal Server Error", error });
-    }
-  };
+    res.json({
+      message: "Stock data fetched successfully",
+      data: stockData,
+    });
+  } catch (error) {
+    console.error("Error fetching stock data:", error);
+    res.status(500).json({ message: "Internal Server Error", error });
+  }
+};
 
   updateStock = async (req: Request, res: Response): Promise<void> => {
     const { ItemCodeId, WarehouseId, QtyOnHand, QtyPO } = req.body;
