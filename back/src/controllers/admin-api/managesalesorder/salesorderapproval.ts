@@ -740,8 +740,10 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
         success: true,
         message: "Approve berhasil! Sales Order telah di-approve dan email telah dikirim.",
       });
+      return;
     } else {
       res.status(400).json({ message: "Stock sudah berhasil update, tetapi ada email yang gagal terkirim. Status tidak berubah." });
+      return;
     }
     console.log("========= END DEBUG ==========");
   } catch (error) {

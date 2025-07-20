@@ -517,6 +517,7 @@ class WarehouseStock {
           failedMatches: failedUpdates
         }
       });
+      return;
     } catch (error) {
       console.error("Global error:", error);
       console.error("[ERROR UPLOAD EXCEL]", error);
