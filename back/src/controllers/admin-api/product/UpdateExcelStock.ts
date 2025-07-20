@@ -136,7 +136,7 @@ class WarehouseStock {
           const rawQtyPO = row["Qty On PO"];
 
           if (!excelItemCode || !businessUnit) {
-            console.warn(`[WARN] Row ${index + 2} missing Item Code / Business Unit`);
+           // console.warn(`[WARN] Row ${index + 2} missing Item Code / Business Unit`);
             failedUpdates.push({ row: index + 2, reason: "Missing Item Code or Business Unit" });
             continue;
           }
@@ -284,7 +284,7 @@ class WarehouseStock {
                 afterQty: qtyOnHand,
                 updatedQtyPO: qtyPO
               });
-              console.log(`[INFO] Row ${index + 2}: Update stok ${excelItemCode} @${businessUnit} => ${beforeQty} -> ${qtyOnHand}`);
+            //  console.log(`[INFO] Row ${index + 2}: Update stok ${excelItemCode} @${businessUnit} => ${beforeQty} -> ${qtyOnHand}`);
             }
           } else {
             const newWarehouseStock = await prisma.warehouseStock.create({
@@ -519,6 +519,7 @@ class WarehouseStock {
       });
     } catch (error) {
       console.error("Global error:", error);
+      console.error("[ERROR UPLOAD EXCEL]", error);
       res.status(500).json({ success: false, message: "Internal server error", error: (error as Error).message });
     }
   };
