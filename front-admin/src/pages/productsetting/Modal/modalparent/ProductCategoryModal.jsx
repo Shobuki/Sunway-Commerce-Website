@@ -331,7 +331,7 @@ const ModalProductCategory = ({ onClose }) => {
                     {categoryImages.map((img) => (
                       <div key={img.Id} className="relative group w-24 h-24 rounded overflow-hidden border bg-white">
                         <img
-                          src={`http://${window.location.hostname}:3000${img.ImageUrl}`}
+                          src={`http://${window.location.hostname}${img.ImageUrl}`}
                           alt="category"
                           className="w-full h-full object-cover"
                         />
