@@ -46,12 +46,15 @@ class WarehouseStock {
 
 
   updateStockFromExcel = async (req: Request, res: Response) => {
+    console.log("[DEBUG] Mulai proses updateStockFromExcel");
     try {
       const file = req.file;
       if (!file) {
+        console.error("[ERROR] Tidak ada file Excel di req.file");
         res.status(400).json({ message: "Excel file is required." });
         return;
       }
+       console.log("[DEBUG] File upload:", file.originalname, "Size:", file.size);
       const tempFilename = `stock_temp_${Date.now()}.xlsx`;
       const uploadDir = path.join(__dirname, '../../uploads/excel');
       if (!fs.existsSync(uploadDir)) {
@@ -64,7 +67,9 @@ class WarehouseStock {
       const workbook = XLSX.read(file.buffer, { type: "buffer" });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
+      console.log("[DEBUG] Sheet terbaca:", sheetName);
 
+      
       // Ambil data per baris mentah (array of array)
       const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
