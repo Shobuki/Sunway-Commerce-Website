@@ -23,16 +23,16 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    console.log('========== CORS DEBUG ==========');
-    console.log('CORS Origin:', origin, '| length:', origin ? origin.length : '-');
+  //  console.log('========== CORS DEBUG ==========');
+ //   console.log('CORS Origin:', origin, '| length:', origin ? origin.length : '-');
     for (const o of allowedOrigins) {
       console.log('Allowed:', o, '| length:', o.length, '| match:', o === origin);
     }
     if (!origin || allowedOrigins.includes(origin)) {
-      console.log('>>> ALLOWED', origin);
+   //   console.log('>>> ALLOWED', origin);
       callback(null, true);
     } else {
-      console.log('>>> BLOCKED', origin);
+    //  console.log('>>> BLOCKED', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -72,10 +72,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Logging middleware
 app.use((req, res, next) => {
   if (!req.url.startsWith('/images') && req.url !== '/') {
-    console.log('Request Method:', req.method);
-    console.log('Request URL:', req.url);
-    console.log('Request Headers:', req.headers);
-    console.log('Request Body:', req.body);
+   // console.log('Request Method:', req.method);
+  //  console.log('Request URL:', req.url);
+  //  console.log('Request Headers:', req.headers);
+  //  console.log('Request Body:', req.body);
   }
   next();
 });

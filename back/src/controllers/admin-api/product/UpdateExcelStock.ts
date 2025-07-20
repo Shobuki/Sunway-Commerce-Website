@@ -69,9 +69,11 @@ class WarehouseStock {
       const worksheet = workbook.Sheets[sheetName];
       console.log("[DEBUG] Sheet terbaca:", sheetName);
 
-      
+
       // Ambil data per baris mentah (array of array)
       const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      console.log("[DEBUG] Jumlah row file:", rawRows.length);
+
 
       // Cari baris header: harus ada "Item Code" dan/atau "Business Unit"
       let headerIndex = rawRows.findIndex(row => {
@@ -84,6 +86,7 @@ class WarehouseStock {
         return;
       }
 
+      console.log("[DEBUG] Header di row:", headerIndex);
       // Ambil header dan data setelahnya saja
       const headerRow = rawRows[headerIndex];
       const dataRows = rawRows.slice(headerIndex + 1);
@@ -91,6 +94,9 @@ class WarehouseStock {
       // Konversi ke array of object (untuk sheet_to_json)
       const normalizedSheet = [headerRow, ...dataRows];
       const sheetData = XLSX.utils.sheet_to_json<any>(XLSX.utils.aoa_to_sheet(normalizedSheet));
+       console.log("[DEBUG] Data sheetData:", sheetData.length, "baris");
+      if (sheetData.length) console.log("[DEBUG] Contoh data pertama:", sheetData[0]);
+
 
       const allItemCodes = await prisma.itemCode.findMany({
         where: { DeletedAt: null },
@@ -102,8 +108,11 @@ class WarehouseStock {
         where: { DeletedAt: null },
         select: { Id: true, BusinessUnit: true }
       });
+       console.log("[DEBUG] DB ItemCode:", allItemCodes.length, "Warehouse:", allWarehouses.length);
 
       const adminId = req.admin?.Id || null;
+      console.log("[DEBUG] AdminID:", adminId);
+
 
       const uploadLog = await prisma.stockHistoryExcelUploadLog.create({
         data: {
@@ -111,7 +120,7 @@ class WarehouseStock {
           CreatedAt: new Date(),
         },
       });
-
+      console.log("[DEBUG] UploadLog ID:", uploadLog.Id);
 
       const updatedItems: any[] = [];
       const updatedPOs: any[] = [];
@@ -127,6 +136,7 @@ class WarehouseStock {
           const rawQtyPO = row["Qty On PO"];
 
           if (!excelItemCode || !businessUnit) {
+            console.warn(`[WARN] Row ${index + 2} missing Item Code / Business Unit`);
             failedUpdates.push({ row: index + 2, reason: "Missing Item Code or Business Unit" });
             continue;
           }
@@ -163,6 +173,13 @@ class WarehouseStock {
               });
               allItemCodes.push({ Id: created.Id, Name: created.Name, PartNumberId: foundPart.Id });
               matchedItem = created;
+              console.log(`[INFO] Baris ${index + 2}: ItemCode baru dibuat, id=${created.Id}`);
+
+            }
+            else {
+              failedUpdates.push({ row: index + 2, item: excelItemCode, reason: "ItemCode not found and no matching PartNumber" });
+              console.warn(`[WARN] Row ${index + 2}: Tidak ditemukan matching ItemCode/PartNumber`);
+              continue;
             }
           }
           if (matchedItem && !matchedItem.PartNumberId) {
@@ -186,6 +203,7 @@ class WarehouseStock {
               const idx = allItemCodes.findIndex(it => it.Id === matchedItem.Id);
               if (idx !== -1) allItemCodes[idx].PartNumberId = foundPart.Id;
               matchedItem.PartNumberId = foundPart.Id;
+              console.log(`[DEBUG] Baris ${index + 2}: ItemCode patch PartNumberId => ${foundPart.Id}`);
             }
           }
 
@@ -211,6 +229,7 @@ class WarehouseStock {
           // Tambahkan ke cache agar tidak dibuat lagi
           if (!allWarehouses.some(wh => this.normalizeString(wh.BusinessUnit) === this.normalizeString(businessUnit))) {
             allWarehouses.push(matchedWarehouse);
+            console.log(`[INFO] Warehouse baru dibuat:`, matchedWarehouse.Id, businessUnit);
           }
 
           const warehouseStock = await prisma.warehouseStock.findFirst({
@@ -265,6 +284,7 @@ class WarehouseStock {
                 afterQty: qtyOnHand,
                 updatedQtyPO: qtyPO
               });
+              console.log(`[INFO] Row ${index + 2}: Update stok ${excelItemCode} @${businessUnit} => ${beforeQty} -> ${qtyOnHand}`);
             }
           } else {
             const newWarehouseStock = await prisma.warehouseStock.create({
@@ -303,6 +323,7 @@ class WarehouseStock {
               afterQty: qtyOnHand,
               updatedQtyPO: qtyPO
             });
+            console.log(`[INFO] Row ${index + 2}: INSERT stok baru ${excelItemCode} @${businessUnit} => ${qtyOnHand}`);
           }
         } catch (innerError) {
           console.error(`Error processing row ${index + 2}:`, innerError);

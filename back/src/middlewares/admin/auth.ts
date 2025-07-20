@@ -29,7 +29,7 @@ class AuthError extends Error {
 // Middleware autentikasi admin, isi req.admin dari JWT
 export const adminAuth = (req: Request, res: Response, next: NextFunction) => {
   try {
-    console.log("==[ADMIN AUTH]==", req.headers.authorization);
+  //  console.log("==[ADMIN AUTH]==", req.headers.authorization);
     const authHeader = req.headers.authorization || req.headers.Authorization;
     const token = typeof authHeader === "string" && authHeader.startsWith("Bearer ")
       ? authHeader.replace("Bearer ", "")
@@ -38,7 +38,7 @@ export const adminAuth = (req: Request, res: Response, next: NextFunction) => {
     if (!token) return next(new AuthError("Token missing", 401));
 
     const payload = jwt.verify(token, JWT_SECRET) as any;
-    console.log("[ADMIN AUTH] decoded JWT:", payload); // <-- ini wajib!
+   // console.log("[ADMIN AUTH] decoded JWT:", payload); // <-- ini wajib!
     req.admin = {
       Id: payload.AdminId,
       Username: payload.Username,
