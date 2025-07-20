@@ -178,7 +178,7 @@ class WarehouseStock {
             }
             else {
               failedUpdates.push({ row: index + 2, item: excelItemCode, reason: "ItemCode not found and no matching PartNumber" });
-              console.warn(`[WARN] Row ${index + 2}: Tidak ditemukan matching ItemCode/PartNumber`);
+            //  console.warn(`[WARN] Row ${index + 2}: Tidak ditemukan matching ItemCode/PartNumber`);
               continue;
             }
           }
@@ -520,7 +520,7 @@ class WarehouseStock {
     } catch (error) {
       console.error("Global error:", error);
       console.error("[ERROR UPLOAD EXCEL]", error);
-      res.status(500).json({ success: false, message: "Internal server error", error: (error as Error).message });
+      res.status(500).json({ success: false, message: "Internal server?? error", error: (error as Error).message });
     }
   };
 }
