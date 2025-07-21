@@ -1,29 +1,18 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
+import { useError } from "../../contexts/ErrorContext";
 
 export default function GlobalErrorPopup() {
-  const [err, setErr] = useState(null);
+  const { error, clearError } = useError();
+
+  // Pengecualian error yang tidak ingin ditampilkan
+  const denyPattern = /(request|status|500|internal|server\s*error|request\s*failed)/i;
+  if (!error || denyPattern.test(error)) return null;
 
   useEffect(() => {
-    function handler(e) {
-      const msg = e.detail?.message || "Unknown error";
+    const timer = setTimeout(clearError, 3000);
+    return () => clearTimeout(timer);
+  }, [error, clearError]);
 
-      // Pengecualian global: jika pesan mengandung keyword berikut
-      // Semua tidak case sensitive
-      const denyPattern = /(request|status|500|internal|server\s*error|request\s*failed)/i;
-      if (denyPattern.test(msg)) {
-        return; // Tidak tampilkan error ini di popup
-      }
-
-      setErr(msg);
-
-      setTimeout(() => setErr(null), 3000);
-    }
-
-    window.addEventListener("global-error", handler);
-    return () => window.removeEventListener("global-error", handler);
-  }, []);
-
-  if (!err) return null;
   return (
     <div style={{
       position: "fixed", bottom: 30, left: "50%",
@@ -32,8 +21,8 @@ export default function GlobalErrorPopup() {
       borderRadius: 8, zIndex: 2000, minWidth: 300, textAlign: "center",
       boxShadow: "0 2px 8px rgba(0,0,0,.15)"
     }}>
-      {err}
-      <button onClick={() => setErr(null)}
+      {error}
+      <button onClick={clearError}
         style={{
           marginLeft: 16, background: "transparent", color: "#fff",
           border: "none", fontWeight: "bold", fontSize: 18, cursor: "pointer"
