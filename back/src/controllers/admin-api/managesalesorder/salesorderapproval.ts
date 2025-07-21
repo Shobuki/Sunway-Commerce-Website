@@ -260,23 +260,46 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-
-    const countToday = await prisma.salesOrder.count({
-      where: {
-        Status: SalesOrderStatus.APPROVED_EMAIL_SENT,
-        CreatedAt: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
-      },
-    });
-
     const storeCode = salesOrder.Dealer?.StoreCode || "XXXX";
-    const sequence = padZero(countToday + 1);
     const day = padZero(now.getDate());
     const month = format(now, "MMM").toUpperCase();
     const year = now.getFullYear();
-    const generatedNumber = `SS-${sequence}/${storeCode}/${day}/${month}/${year}`;
+
+
+    // Penomoran sales order: Atomic Transaction untuk menghindari double nomor pada hari yang sama
+    let generatedNumber = "";
+    await prisma.$transaction(async (tx) => {
+      // Cari nomor terbesar sales order hari ini (semua status)
+      const lastOrderToday = await tx.salesOrder.findFirst({
+        where: {
+          CreatedAt: {
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+        },
+        orderBy: { SalesOrderNumber: "desc" },
+      });
+
+      let lastSeq = 0;
+      if (lastOrderToday && lastOrderToday.SalesOrderNumber) {
+        const match = lastOrderToday.SalesOrderNumber.match(/^SS-(\d+)/);
+        if (match) lastSeq = parseInt(match[1], 10);
+      }
+      const nextSeq = padZero(lastSeq + 1);
+      generatedNumber = `SS-${nextSeq}/${storeCode}/${day}/${month}/${year}`;
+
+      // **Update nomor dan status sekalian di transaction**
+      await tx.salesOrder.update({
+        where: { Id: parsedSalesOrderId },
+        data: {
+          Status: SalesOrderStatus.APPROVED_EMAIL_SENT,
+          SalesOrderNumber: generatedNumber,
+        },
+      });
+    });
+
+
+
 
     if (SalesOrderDetails && Array.isArray(SalesOrderDetails)) {
       const activeTax = await prisma.tax.findFirst({
@@ -535,14 +558,6 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
       }
     }
 
-    await prisma.salesOrder.update({
-      where: { Id: parsedSalesOrderId },
-      data: {
-        Status: SalesOrderStatus.APPROVED_EMAIL_SENT,
-        SalesOrderNumber: generatedNumber,
-      },
-    });
-
     // Cek apakah file sudah ada
     let salesOrderFile = await prisma.salesOrderFile.findUnique({
       where: { SalesOrderId: parsedSalesOrderId }
@@ -729,13 +744,6 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
 
     // UPDATE STATUS HANYA JIKA SEMUA EMAIL SENT
     if (allEmailSent) {
-      await prisma.salesOrder.update({
-        where: { Id: parsedSalesOrderId },
-        data: {
-          Status: SalesOrderStatus.APPROVED_EMAIL_SENT,
-          SalesOrderNumber: generatedNumber,
-        },
-      });
       res.status(200).json({
         success: true,
         message: "Approve berhasil! Sales Order telah di-approve dan email telah dikirim.",
