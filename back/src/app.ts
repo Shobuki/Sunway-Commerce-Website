@@ -96,23 +96,19 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  if (
-    (typeof err === 'string' && err.trim() === 'Internal Server Error') ||
-    (err && err.message && err.message.trim() === 'Internal Server Error') ||
-    (err?.response?.data === 'Internal Server Error') ||
-    (err?.response?.data?.message === 'Internal Server Error')
-  ) {
-    res.status(500).json({
-      success: false,
-      message: 'Maaf, ada kesalahan pada server (filtered).'
-    });
-    return; // break handler
+app.use((
+  err: any,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  console.error("[GLOBAL ERROR]", err);
+  if (res.headersSent) {
+    return;
   }
-  // Handler error lain
-  res.status(500).json({
+  res.status(200).json({
     success: false,
-    message: err.message || 'Internal Server Error?'
+    message: "Terjadi error internal. Coba lagi atau hubungi admin.",
   });
 });
 

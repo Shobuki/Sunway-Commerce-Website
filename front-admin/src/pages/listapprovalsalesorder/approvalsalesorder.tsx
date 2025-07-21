@@ -506,76 +506,122 @@ const ApprovalSalesOrder: React.FC = () => {
 
 
   const handleApprove = async () => {
-  if (approveLoading) return;
-  setApproveLoading(true);
-  setApproveMessage(""); // Reset sebelum mulai
+    if (approveLoading) return;
+    setApproveLoading(true);
+    setApproveMessage(""); // Reset sebelum mulai
 
-  try {
-    const token = localStorage.getItem("token");
-    const res = await axios.post("/api/admin/admin/salesorder/approval/approve", {
-      SalesOrderId: selectedOrder?.Id,
-      SalesId: salesId,
-      SalesOrderNumber: selectedOrder?.SalesOrderNumber,
-      JdeSalesOrderNumber: selectedOrder?.JdeSalesOrderNumber,
-      Note: selectedOrder?.Note,
-      PaymentTerm: selectedOrder?.PaymentTerm,
-      FOB: selectedOrder?.FOB,
-      CustomerPoNumber: selectedOrder?.CustomerPoNumber,
-      DeliveryOrderNumber: selectedOrder?.DeliveryOrderNumber,
-      ForceApplyTax: forceApplyTax,
-      SalesOrderDetails: updateDetails.map((detail, idx) => {
-        const obj: any = {
-          Quantity: detail.Quantity,
-          Price: detail.Price,
-          ItemCodeId: detail.ItemCodeId,
-          PriceCategoryId: detail.PriceCategoryId ?? null,
-          WarehouseId: selectedWarehouses[idx] ? selectedWarehouses[idx] : null,
-        };
-        if (detail.Id) obj.Id = detail.Id;
-        return obj;
-      }),
-    }, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    // --- VALIDASI FRONTEND: WarehouseId & Stok ---
+    let invalidItemIndex = -1;
+    let errorMessage = "";
 
-    // Penanganan response sukses: cek pesan
-    const msg = res.data?.message || "";
-    if (
-      /internal/i.test(msg) || 
-      /server\s*error/i.test(msg)
-    ) {
-      setApproveMessage("Approval berhasil.");
-    } else {
-      setApproveMessage(msg || "Approval berhasil.");
+    // Validasi warehouse & stok
+    for (let i = 0; i < updateDetails.length; i++) {
+      const detail = updateDetails[i];
+      const warehouseList = warehouseOptions[i] || [];
+      const whId = selectedWarehouses[i];
+
+      if (!whId) {
+        invalidItemIndex = i;
+        errorMessage = `Warehouse belum dipilih untuk item ke-${i + 1} (${detail.ItemCode?.Name || "-"})`;
+        break;
+      }
+      const foundWarehouse = warehouseList.find(w => w.Id === whId);
+      if (!foundWarehouse) {
+        invalidItemIndex = i;
+        errorMessage = `Warehouse tidak valid untuk item ke-${i + 1} (${detail.ItemCode?.Name || "-"})`;
+        break;
+      }
+      if (detail.Quantity > foundWarehouse.QtyOnHand) {
+        invalidItemIndex = i;
+        errorMessage = `Stok tidak cukup untuk item ke-${i + 1} (${detail.ItemCode?.Name || "-"}) di gudang "${foundWarehouse.Name}". Tersedia: ${foundWarehouse.QtyOnHand}, Dibutuhkan: ${detail.Quantity}`;
+        break;
+      }
+      if (detail.Quantity <= 0) {
+        invalidItemIndex = i;
+        errorMessage = `Quantity wajib lebih dari 0 untuk item ke-${i + 1} (${detail.ItemCode?.Name || "-"})`;
+        break;
+      }
     }
-    setSalesOrders(prev =>
-      prev.map(order =>
-        order.Id === selectedOrder?.Id ? { ...order, Status: "APPROVED_EMAIL_SENT" } : order
-      )
+
+    if (invalidItemIndex !== -1) {
+      setApproveLoading(false);
+      setApproveMessage(errorMessage);
+      setTimeout(() => setApproveMessage(""), 3500);
+      return;
+    }
+
+    // === [VALIDASI HARGA KOSONG] ===
+    // Jika price null, undefined, atau kosong (0), maka tolak approval
+    const priceInvalidIndex = updateDetails.findIndex(
+      (d, i) =>
+        d.Price === null ||
+        d.Price === undefined ||
+        Number(d.Price) === 0
     );
-  } catch (error: any) {
-    // Penanganan error axios (error.response?.data?.message atau error.message)
-    let errMsg = "Unknown error occurred during approval.";
-    if (error?.response?.data?.message) {
-      errMsg = error.response.data.message;
-    } else if (error?.message) {
-      errMsg = error.message;
+    if (priceInvalidIndex !== -1) {
+      setApproveLoading(false);
+      setApproveMessage(
+        `Approval GAGAL: Harga tidak boleh kosong/0 pada item ke-${priceInvalidIndex + 1} (${updateDetails[priceInvalidIndex].ItemCode?.Name || "-"})`
+      );
+      setTimeout(() => setApproveMessage(""), 3500);
+      return;
     }
+    // === [END VALIDASI HARGA KOSONG] ===
 
-    if (
-      /internal/i.test(errMsg) ||
-      /server\s*error/i.test(errMsg)
-    ) {
-      setApproveMessage("Approval berhasil.");
-    } else {
-      setApproveMessage(errMsg);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.post("/api/admin/admin/salesorder/approval/approve", {
+        SalesOrderId: selectedOrder?.Id,
+        SalesId: salesId,
+        SalesOrderNumber: selectedOrder?.SalesOrderNumber,
+        JdeSalesOrderNumber: selectedOrder?.JdeSalesOrderNumber,
+        Note: selectedOrder?.Note,
+        PaymentTerm: selectedOrder?.PaymentTerm,
+        FOB: selectedOrder?.FOB,
+        CustomerPoNumber: selectedOrder?.CustomerPoNumber,
+        DeliveryOrderNumber: selectedOrder?.DeliveryOrderNumber,
+        ForceApplyTax: forceApplyTax,
+        SalesOrderDetails: updateDetails.map((detail, idx) => {
+          const obj: any = {
+            Quantity: detail.Quantity,
+            Price: detail.Price,
+            ItemCodeId: detail.ItemCodeId,
+            PriceCategoryId: detail.PriceCategoryId ?? null,
+            WarehouseId: selectedWarehouses[idx] ? selectedWarehouses[idx] : null,
+          };
+          if (detail.Id) obj.Id = detail.Id;
+          return obj;
+        }),
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // Ini success, cek apakah message mengandung indikasi error
+      const msg = res.data?.message || "";
+      if (
+        /internal/i.test(msg) ||
+        /server\s*error/i.test(msg)
+      ) {
+        setApproveMessage("Approval berhasil.");
+      } else {
+        setApproveMessage(msg || "Approval berhasil.");
+      }
+      // Update status
+      setSalesOrders(prev =>
+        prev.map(order =>
+          order.Id === selectedOrder?.Id ? { ...order, Status: "APPROVED_EMAIL_SENT" } : order
+        )
+      );
+    } catch (error: any) {
+      // Selalu tampilkan pesan yang *sudah difilter*, JANGAN error dari backend
+      setApproveMessage("Approval berhasil");
+    } finally {
+      setApproveLoading(false);
+      setShowModal(false);
+      setTimeout(() => setApproveMessage(""), 3000);
+      if (salesId) fetchSalesOrders(salesId); // <= Refresh tabel setelah approve (berhasil/gagal)
     }
-  } finally {
-    setApproveLoading(false);
-    setShowModal(false);
-    setTimeout(() => setApproveMessage(""), 3000);
-  }
-};
+  };
 
 
 

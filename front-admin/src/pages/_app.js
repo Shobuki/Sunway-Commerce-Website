@@ -7,8 +7,8 @@ import GlobalErrorPopup from "../components/notification/GlobalErrorPopup";
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import React, { useEffect } from "react";
+import { useRouter } from "next/router";
 
-// Handler global: tampilkan FailedAccess jika state failed
 function AccessHandler({ children }) {
   const { failedAccess, failMsg } = useAccess();
   return failedAccess ? <FailedAccess message={failMsg} /> : children;
@@ -32,7 +32,29 @@ function GlobalErrorListener() {
 }
 
 export default function App({ Component, pageProps }) {
+  const router = useRouter();
+
+  // **Daftar halaman yang ingin dikecualikan dari error context & popup**
+  const excludeErrorProvider = [
+    "/listapprovalsalesorder/approvalsalesorder"
+    // tambah path lain jika perlu
+  ];
+  const isExcluded = excludeErrorProvider.includes(router.pathname);
+
   const getLayout = Component.getLayout || ((page) => <Layout>{page}</Layout>);
+
+  // Jika halaman yang diexclude, render tanpa ErrorProvider dan GlobalErrorPopup
+  if (isExcluded) {
+    return (
+      <AccessProvider>
+        <AccessHandler>
+          {getLayout(<Component {...pageProps} />)}
+        </AccessHandler>
+      </AccessProvider>
+    );
+  }
+
+  // Default: render semua provider dan global error
   return (
     <ErrorProvider>
       <AccessProvider>

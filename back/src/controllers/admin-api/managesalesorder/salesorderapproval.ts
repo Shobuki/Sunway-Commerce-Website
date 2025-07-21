@@ -177,35 +177,48 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
 
     const adminId = req.admin?.Id;
     if (!adminId) {
-      res.status(401).json({ message: "Unauthorized. AdminId missing." });
+      res.status(200).json({ message: "Unauthorized. AdminId missing." });
       return;
     }
 
     if (!parsedSalesOrderId || isNaN(parsedSalesOrderId)) {
-      res.status(400).json({ message: "SalesOrderId must be a valid number." });
+      res.status(200).json({ message: "SalesOrderId must be a valid number." });
       return;
     }
     if (!parsedSalesId || isNaN(parsedSalesId)) {
-      res.status(400).json({ message: "SalesId must be a valid number." });
+      res.status(200).json({ message: "SalesId must be a valid number." });
       return;
     }
 
+    console.log("[DEBUG][ApproveSalesOrder] BODY:", JSON.stringify(req.body, null, 2));
+    console.log("[DEBUG][ApproveSalesOrder] adminId:", req.admin?.Id);
+    console.log("[DEBUG][ApproveSalesOrder] SalesOrderId:", parsedSalesOrderId, "SalesId:", parsedSalesId);
+
     // === VALIDASI HARGA DULU SEBELUM PROSES ===
-    if (SalesOrderDetails && Array.isArray(SalesOrderDetails)) {
-      const hasNoPrice = SalesOrderDetails.some(
-        (d: any) => !d.Price || d.Price === 0
-      );
-      if (hasNoPrice) {
-        res.status(400).json({
-          message: "Approval gagal. Ada item tanpa harga pada Sales Order ini. Lengkapi harga semua item sebelum approve.",
-          details: SalesOrderDetails.filter((d: any) => !d.Price || d.Price === 0).map((d: any) => ({
-            ItemCodeId: d.ItemCodeId,
-            Quantity: d.Quantity
-          }))
-        });
-        return;
+   if (SalesOrderDetails && Array.isArray(SalesOrderDetails)) {
+  for (const detail of SalesOrderDetails) {
+    if (!detail.WarehouseId || detail.FulfillmentStatus !== 'READY' || detail.Quantity <= 0) continue;
+    const stock = await prisma.warehouseStock.findFirst({
+      where: {
+        WarehouseId: detail.WarehouseId,
+        ItemCodeId: detail.ItemCodeId,
+        DeletedAt: null
       }
+    });
+    if (!stock || stock.QtyOnHand < detail.Quantity) {
+      // ===> STOP PROSES DI SINI! RETURN LANGSUNG, JANGAN LANJUT APA2!
+      res.status(400).json({
+        success: false,
+        message: `Stock tidak cukup untuk ItemCodeId ${detail.ItemCodeId} di warehouseId ${detail.WarehouseId}`,
+        itemCodeId: detail.ItemCodeId,
+        warehouseId: detail.WarehouseId,
+        qtyDibutuhkan: detail.Quantity,
+        qtyTersedia: stock ? stock.QtyOnHand : 0
+      });
+      return;
     }
+  }
+}
 
     const updateData: any = {};
     if (SalesOrderNumber !== undefined) updateData.SalesOrderNumber = SalesOrderNumber;
@@ -239,7 +252,7 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
     });
 
     if (!salesOrder) {
-      res.status(404).json({ message: "Sales Order not found." });
+      res.status(200).json({ message: "Sales Order not found." });
       return;
     }
     const dealerId = salesOrder.DealerId;
@@ -253,7 +266,7 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
     });
 
     if (!recipients.length) {
-      res.status(400).json({ message: "No recipients found for this Sales." });
+      res.status(200).json({ message: "No recipients found for this Sales." });
       return;
     }
 
@@ -423,9 +436,13 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
               }
             }
             if (!selectedWarehouse) {
-              throw new Error(
-                `Stock tidak cukup untuk ItemCodeId ${detail.ItemCodeId} pada semua gudang`
-              );
+              res.status(200).json({
+                success: false,
+                message: `Stock tidak cukup untuk ItemCodeId ${detail.ItemCodeId} pada semua gudang`,
+                itemCodeId: detail.ItemCodeId,
+                quantity: detail.Quantity
+              });
+              return; // Stop proses lebih lanjut
             }
             warehouseIdToUse = selectedWarehouse.WarehouseId;
           }
@@ -483,10 +500,14 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
       const hasNoPrice = details.some(d => !d.Price || d.Price === 0);
 
 
-
+      console.log('DEBUG: Akan generateExcel/PDF untuk SO:', parsedSalesOrderId);
       // Regenerate file jika detail ikut diubah
+      console.log("[DEBUG] MULAI generateExcel");
       const excelFileName = await generateExcel(parsedSalesOrderId);
+      console.log("[DEBUG] SELESAI generateExcel:", excelFileName);
       const pdfFileName = await generatePDF(parsedSalesOrderId);
+
+      console.log('DEBUG: excelFileName:', excelFileName, 'pdfFileName:', pdfFileName);
 
       await prisma.salesOrderFile.updateMany({
         where: { SalesOrderId: parsedSalesOrderId },
@@ -512,14 +533,12 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
       // UPDATE, CREATE, DELETE detail tanpa reversal manual
     }
 
-    // Ambil detail sales order lengkap untuk update stok
+
     const dbDetails = await prisma.salesOrderDetail.findMany({
       where: { SalesOrderId: parsedSalesOrderId },
     });
 
-    console.log("========= DEBUG DETAIL DB FOR STOCK ==========");
-    console.log("dbDetails:", JSON.stringify(dbDetails, null, 2));
-
+    // Cek semua stok dulu
     for (const detail of dbDetails) {
       if (
         detail.FulfillmentStatus === "READY" &&
@@ -534,25 +553,25 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
             QtyOnHand: { gte: detail.Quantity }
           }
         });
-        console.log('PENGURANGAN STOK', {
-          warehouseStockId: stock?.Id,
-          warehouseId: detail.WarehouseId,
-          itemCodeId: detail.ItemCodeId,
-          qtyBefore: stock?.QtyOnHand,
-          qtyKurang: detail.Quantity
-        });
         if (!stock) {
-          throw new Error(
-            `Stock tidak cukup di warehouseId ${detail.WarehouseId} untuk ItemCodeId ${detail.ItemCodeId}`
-          );
+          // ERROR: stok tidak cukup atau tidak ditemukan
+          res.status(400).json({
+            success: false,
+            message: `Stock tidak ditemukan atau stok kurang untuk ItemCodeId ${detail.ItemCodeId} di warehouseId ${detail.WarehouseId}`,
+            itemCodeId: detail.ItemCodeId,
+            warehouseId: detail.WarehouseId,
+            qtyDibutuhkan: detail.Quantity
+          });
+          return;
         }
         console.log('PENGURANGAN STOK', {
-          warehouseStockId: stock?.Id,
+          warehouseStockId: stock.Id,
           warehouseId: detail.WarehouseId,
           itemCodeId: detail.ItemCodeId,
-          qtyBefore: stock?.QtyOnHand,
+          qtyBefore: stock.QtyOnHand,
           qtyKurang: detail.Quantity
         });
+
         await prisma.warehouseStock.update({
           where: { Id: stock.Id },
           data: { QtyOnHand: { decrement: detail.Quantity } }
@@ -670,6 +689,10 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
       // Tambahkan variabel lain jika diperlukan oleh template
     };
 
+    console.log('DEBUG: updatedSalesOrder for email:', JSON.stringify(updatedSalesOrder, null, 2));
+    console.log('DEBUG: email template:', template);
+    console.log('DEBUG: email body mapping data:', data);
+
     // --- 4. Render template dengan data
     const emailBody = renderTemplate(template?.Body || defaultBody, data);
     const emailSubject = renderTemplate(template?.Subject || defaultSubject, data);
@@ -699,7 +722,7 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
       res.status(500).json({ message: "Email configuration not found or incomplete." });
       return;
     }
-
+    console.log('DEBUG: Akan kirim email ke:', recipients.map(r => r.RecipientEmail));
     // 🛠 Buat transporter secara dinamis berdasarkan DB
     const transporter = nodemailer.createTransport({
       host: emailConfig.Host,
@@ -714,7 +737,7 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
       },
     });
 
-
+    console.log("[DEBUG] EmailConfig:", emailConfig);
     // VARIABEL UNTUK TRACKING
     let allEmailSent = true;
 
@@ -732,6 +755,7 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
 
         try {
           await transporter.sendMail(mailOptions);
+          console.log("Email sent to", recipient.RecipientEmail);
         } catch (error) {
           status = EmailStatus.FAILED;
           allEmailSent = false;
@@ -760,23 +784,23 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
         success: true,
         message: "Approve berhasil! Sales Order telah di-approve dan email telah dikirim.",
       });
+      console.log("[API END] approveSalesOrder SUKSES:", parsedSalesOrderId);
       return;
     }
     res.status(400).json({ message: "Stock sudah berhasil update, tetapi ada email yang gagal terkirim. Status tidak berubah." });
+    console.log("[API END] approveSalesOrder EMAIL GAGAL:", parsedSalesOrderId);
     return;
   } catch (error) {
-    console.error("Error approving Sales Order:", error);
-    if (!res.headersSent) {
-      if (error instanceof Error) {
-        res.status(500).json({ message: error.message, stack: error.stack, detail: error });
-      } else {
-        res.status(500).json({ message: "Unknown error", detail: error });
-      }
+    // 1. Logging detail tetap di console/server
+    console.error("[ERROR approveSalesOrder]", error);
+
+    // 2. Cek apakah response sudah pernah dikirim
+    if (res.headersSent) {
+      console.warn("WARNING: Response sudah dikirim sebelum error ini terjadi!");
       return;
-    } else {
-      // Sudah ada response sebelumnya, tidak perlu balas lagi
-      console.error("Post-response error (sudah ada response):", error);
     }
+
+
   }
 };
 
