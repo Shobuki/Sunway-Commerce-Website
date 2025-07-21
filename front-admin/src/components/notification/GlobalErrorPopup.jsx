@@ -7,13 +7,7 @@ export default function GlobalErrorPopup() {
     function handler(e) {
       const msg = e.detail?.message || "Unknown error";
 
-      // Global pengecualian error:
-      // - mengandung 'request'
-      // - mengandung 'status'
-      // - mengandung '500'
-      // - mengandung 'internal'
-      // - mengandung 'server error'
-      // - mengandung 'request failed'
+      // Pengecualian global: jika pesan mengandung keyword berikut
       // Semua tidak case sensitive
       const denyPattern = /(request|status|500|internal|server\s*error|request\s*failed)/i;
       if (denyPattern.test(msg)) {
