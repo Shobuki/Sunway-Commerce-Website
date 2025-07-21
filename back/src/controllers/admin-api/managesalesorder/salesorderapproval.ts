@@ -755,18 +755,15 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
       })
     );
 
-    // UPDATE STATUS HANYA JIKA SEMUA EMAIL SENT
     if (allEmailSent) {
       res.status(200).json({
         success: true,
         message: "Approve berhasil! Sales Order telah di-approve dan email telah dikirim.",
       });
       return;
-    } else {
-      res.status(400).json({ message: "Stock sudah berhasil update, tetapi ada email yang gagal terkirim. Status tidak berubah." });
-      return;
     }
-    console.log("========= END DEBUG ==========");
+    res.status(400).json({ message: "Stock sudah berhasil update, tetapi ada email yang gagal terkirim. Status tidak berubah." });
+    return;
   } catch (error) {
     console.error("Error approving Sales Order:", error);
     if (!res.headersSent) {
@@ -775,6 +772,7 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
       } else {
         res.status(500).json({ message: "Unknown error", detail: error });
       }
+      return;
     } else {
       // Sudah ada response sebelumnya, tidak perlu balas lagi
       console.error("Post-response error (sudah ada response):", error);
