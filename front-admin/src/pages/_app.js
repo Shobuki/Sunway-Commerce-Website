@@ -14,15 +14,15 @@ function AccessHandler({ children }) {
   return failedAccess ? <FailedAccess message={failMsg} /> : children;
 }
 
-// Komponen untuk listen global-error event, langsung pakai useError context
+// Komponen untuk listen global-error event, filter langsung di sini
 function GlobalErrorListener() {
   const { showError } = useError();
   useEffect(() => {
     function handler(e) {
       const msg = e.detail?.message || "Unknown error";
-      // Filter agar error yang tidak perlu, tidak ditampilkan popup
+      // Filter agar error tertentu tidak ditampilkan popup
       const denyPattern = /(request|status|500|internal|server\s*error|request\s*failed)/i;
-      if (denyPattern.test(msg)) return;
+      if (denyPattern.test(msg)) return; // Tidak tampilkan error ini
       showError(msg);
     }
     window.addEventListener("global-error", handler);

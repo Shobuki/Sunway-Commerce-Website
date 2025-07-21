@@ -1,3 +1,4 @@
+// ErrorContext.js
 import React, { createContext, useState, useContext, useCallback } from "react";
 
 const ErrorContext = createContext();
@@ -9,12 +10,13 @@ export function useError() {
 export function ErrorProvider({ children }) {
   const [error, setError] = useState(null);
 
-  // Fungsi untuk set error dari interceptor
+  // ⛔ FILTER juga DI SINI!
   const showError = useCallback((msg) => {
+    const denyPattern = /(request|status|500|internal|server\s*error|request\s*failed)/i;
+    if (denyPattern.test(msg)) return;  // << SKIP error tertentu
     setError(msg);
   }, []);
 
-  // Reset popup
   const clearError = () => setError(null);
 
   return (
