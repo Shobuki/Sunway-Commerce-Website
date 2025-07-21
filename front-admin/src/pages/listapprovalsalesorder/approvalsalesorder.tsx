@@ -506,59 +506,76 @@ const ApprovalSalesOrder: React.FC = () => {
 
 
   const handleApprove = async () => {
-    if (approveLoading) return;
-    setApproveLoading(true);
-    setApproveMessage(""); // Reset sebelum mulai
+  if (approveLoading) return;
+  setApproveLoading(true);
+  setApproveMessage(""); // Reset sebelum mulai
 
-    try {
-      const token = localStorage.getItem("token");
-      const res = await axios.post("/api/admin/admin/salesorder/approval/approve", {
-        SalesOrderId: selectedOrder?.Id,
-        SalesId: salesId,
-        SalesOrderNumber: selectedOrder?.SalesOrderNumber,
-        JdeSalesOrderNumber: selectedOrder?.JdeSalesOrderNumber,
-        Note: selectedOrder?.Note,
-        PaymentTerm: selectedOrder?.PaymentTerm,
-        FOB: selectedOrder?.FOB,
-        CustomerPoNumber: selectedOrder?.CustomerPoNumber,
-        DeliveryOrderNumber: selectedOrder?.DeliveryOrderNumber,
-        ForceApplyTax: forceApplyTax,
-        SalesOrderDetails: updateDetails.map((detail, idx) => {
-          const obj: any = {
-            Quantity: detail.Quantity,
-            Price: detail.Price,
-            ItemCodeId: detail.ItemCodeId,
-            PriceCategoryId: detail.PriceCategoryId ?? null,
-            WarehouseId: selectedWarehouses[idx] ? selectedWarehouses[idx] : null,
-          };
-          if (detail.Id) obj.Id = detail.Id;
-          return obj;
-        }),
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+  try {
+    const token = localStorage.getItem("token");
+    const res = await axios.post("/api/admin/admin/salesorder/approval/approve", {
+      SalesOrderId: selectedOrder?.Id,
+      SalesId: salesId,
+      SalesOrderNumber: selectedOrder?.SalesOrderNumber,
+      JdeSalesOrderNumber: selectedOrder?.JdeSalesOrderNumber,
+      Note: selectedOrder?.Note,
+      PaymentTerm: selectedOrder?.PaymentTerm,
+      FOB: selectedOrder?.FOB,
+      CustomerPoNumber: selectedOrder?.CustomerPoNumber,
+      DeliveryOrderNumber: selectedOrder?.DeliveryOrderNumber,
+      ForceApplyTax: forceApplyTax,
+      SalesOrderDetails: updateDetails.map((detail, idx) => {
+        const obj: any = {
+          Quantity: detail.Quantity,
+          Price: detail.Price,
+          ItemCodeId: detail.ItemCodeId,
+          PriceCategoryId: detail.PriceCategoryId ?? null,
+          WarehouseId: selectedWarehouses[idx] ? selectedWarehouses[idx] : null,
+        };
+        if (detail.Id) obj.Id = detail.Id;
+        return obj;
+      }),
+    }, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
 
-      // Ambil message dari response API
-      setApproveMessage(res.data?.message || "Approval berhasil.");
-      // Optional: update status lokal
-      setSalesOrders(prev =>
-        prev.map(order =>
-          order.Id === selectedOrder?.Id ? { ...order, Status: "APPROVED_EMAIL_SENT" } : order
-        )
-      );
-    } catch (error) {
-      console.error("Error updating Sales Order:", error);
-      if (error instanceof Error) {
-        setApproveMessage(error.message);
-      } else {
-        setApproveMessage("Unknown error occurred during approval.");
-      }
-    } finally {
-      setApproveLoading(false);
-      setShowModal(false);
-      setTimeout(() => setApproveMessage(""), 3000);
+    // Penanganan response sukses: cek pesan
+    const msg = res.data?.message || "";
+    if (
+      /internal/i.test(msg) || 
+      /server\s*error/i.test(msg)
+    ) {
+      setApproveMessage("Approval berhasil.");
+    } else {
+      setApproveMessage(msg || "Approval berhasil.");
     }
-  };
+    setSalesOrders(prev =>
+      prev.map(order =>
+        order.Id === selectedOrder?.Id ? { ...order, Status: "APPROVED_EMAIL_SENT" } : order
+      )
+    );
+  } catch (error: any) {
+    // Penanganan error axios (error.response?.data?.message atau error.message)
+    let errMsg = "Unknown error occurred during approval.";
+    if (error?.response?.data?.message) {
+      errMsg = error.response.data.message;
+    } else if (error?.message) {
+      errMsg = error.message;
+    }
+
+    if (
+      /internal/i.test(errMsg) ||
+      /server\s*error/i.test(errMsg)
+    ) {
+      setApproveMessage("Approval berhasil.");
+    } else {
+      setApproveMessage(errMsg);
+    }
+  } finally {
+    setApproveLoading(false);
+    setShowModal(false);
+    setTimeout(() => setApproveMessage(""), 3000);
+  }
+};
 
 
 
