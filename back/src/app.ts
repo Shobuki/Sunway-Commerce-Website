@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config(); // ✅ lebih konsisten
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
 
@@ -93,6 +93,27 @@ app.options('*', cors());
 // Base route
 app.get('/', (req: Request, res: Response) => {
   res.send('API is working!');
+});
+
+
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (
+    (typeof err === 'string' && err.trim() === 'Internal Server Error') ||
+    (err && err.message && err.message.trim() === 'Internal Server Error') ||
+    (err?.response?.data === 'Internal Server Error') ||
+    (err?.response?.data?.message === 'Internal Server Error')
+  ) {
+    res.status(500).json({
+      success: false,
+      message: 'Maaf, ada kesalahan pada server (filtered).'
+    });
+    return; // break handler
+  }
+  // Handler error lain
+  res.status(500).json({
+    success: false,
+    message: err.message || 'Internal Server Error?'
+  });
 });
 
 // Start the server
