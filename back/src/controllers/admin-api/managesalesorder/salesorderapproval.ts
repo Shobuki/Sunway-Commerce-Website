@@ -267,8 +267,9 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
 
 
     // Penomoran sales order: Atomic Transaction untuk menghindari double nomor pada hari yang sama
+    // Penomoran sales order: Atomic Transaction untuk menghindari double nomor pada hari yang sama
     await prisma.$transaction(async (tx) => {
-      // Ambil sales order terbaru (dengan nomor lama, kalau ada)
+      // Cek dulu, jika sales order sudah punya nomor, jangan diubah
       const currentOrder = await tx.salesOrder.findUnique({
         where: { Id: parsedSalesOrderId },
         select: { SalesOrderNumber: true }
@@ -278,25 +279,30 @@ export const approveSalesOrder = async (req: Request, res: Response): Promise<vo
         Status: SalesOrderStatus.APPROVED_EMAIL_SENT
       };
 
+      // Hanya generate nomor jika kosong/belum ada
       if (!currentOrder?.SalesOrderNumber || currentOrder.SalesOrderNumber.trim() === "") {
-        // HANYA generate nomor jika belum ada
-        const lastOrderToday = await tx.salesOrder.findFirst({
-          where: {
-            CreatedAt: {
-              gte: startOfDay,
-              lte: endOfDay,
-            },
-          },
-          orderBy: { SalesOrderNumber: "desc" },
-        });
+        // Loop: cari nomor yang pasti unik
+        let found = false;
+        let trySeq = 1;
+        let generatedNumber = "";
 
-        let lastSeq = 0;
-        if (lastOrderToday && lastOrderToday.SalesOrderNumber) {
-          const match = lastOrderToday.SalesOrderNumber.match(/^SS-(\d+)/);
-          if (match) lastSeq = parseInt(match[1], 10);
+        while (!found) {
+          const seqStr = padZero(trySeq);
+          generatedNumber = `SS-${seqStr}/${storeCode}/${day}/${month}/${year}`;
+          // Cari sales order hari ini dengan nomor ini
+          const exists = await tx.salesOrder.findFirst({
+            where: {
+              SalesOrderNumber: generatedNumber,
+              CreatedAt: { gte: startOfDay, lte: endOfDay }
+            }
+          });
+          if (!exists) {
+            found = true;
+          } else {
+            trySeq++;
+          }
         }
-        const nextSeq = padZero(lastSeq + 1);
-        updateData.SalesOrderNumber = `SS-${nextSeq}/${storeCode}/${day}/${month}/${year}`;
+        updateData.SalesOrderNumber = generatedNumber;
       }
 
       await tx.salesOrder.update({
