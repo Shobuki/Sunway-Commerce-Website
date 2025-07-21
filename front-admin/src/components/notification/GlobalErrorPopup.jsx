@@ -1,18 +1,23 @@
-import React, { useEffect } from "react";
-import { useError } from "../../contexts/ErrorContext";
+import React, { useEffect, useState } from "react";
 
 export default function GlobalErrorPopup() {
-  const { error, clearError } = useError();
-
-  // Pengecualian error yang tidak ingin ditampilkan
-  const denyPattern = /(request|status|500|internal|server\s*error|request\s*failed)/i;
-  if (!error || denyPattern.test(error)) return null;
+  const [err, setErr] = useState(null);
 
   useEffect(() => {
-    const timer = setTimeout(clearError, 3000);
-    return () => clearTimeout(timer);
-  }, [error, clearError]);
+    function handler(e) {
+      const msg = e.detail?.message || "Unknown error";
+      // Filter global error
+      const denyPattern = /(request|status|500|internal|server\s*error|request\s*failed)/i;
+      if (denyPattern.test(msg)) return;
+      setErr(msg);
+      setTimeout(() => setErr(null), 3000);
+    }
+    window.addEventListener("global-error", handler);
+    return () => window.removeEventListener("global-error", handler);
+  }, []);
 
+  // Setelah useEffect, baru lakukan return
+  if (!err) return null;
   return (
     <div style={{
       position: "fixed", bottom: 30, left: "50%",
@@ -21,8 +26,8 @@ export default function GlobalErrorPopup() {
       borderRadius: 8, zIndex: 2000, minWidth: 300, textAlign: "center",
       boxShadow: "0 2px 8px rgba(0,0,0,.15)"
     }}>
-      {error}
-      <button onClick={clearError}
+      {err}
+      <button onClick={() => setErr(null)}
         style={{
           marginLeft: 16, background: "transparent", color: "#fff",
           border: "none", fontWeight: "bold", fontSize: 18, cursor: "pointer"
