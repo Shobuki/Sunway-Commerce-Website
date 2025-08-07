@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const product_1 = require("../../../controllers/dealer-api/product/product");
+const productdetail_1 = require("../../../controllers/dealer-api/product/productdetail");
+const productspecification_1 = require("../../../controllers/dealer-api/product/productspecification");
+const router = (0, express_1.Router)();
+router.get("/product/list", product_1.listProductCategoriesWithProducts);
+router.post("/product/detail/product/:id", productdetail_1.getProductDetail);
+router.get("/product/detail/image/:id", productdetail_1.getProductImages);
+router.post("/product/detail/options", productdetail_1.fetchPartNumberFromProduct);
+router.post("/product/detail/specification/files", productspecification_1.getLatestProductSpecificationFile);
+router.post("/product/detail/specification/files/download", productspecification_1.downloadProductSpecificationFile);
+exports.default = router;

@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const userprofile_1 = require("../../../controllers/dealer-api/profileuser/userprofile");
+const forgotpass_1 = require("../../../controllers/dealer-api/profileuser/forgotpass");
+const router = (0, express_1.Router)();
+router.post("/profile", userprofile_1.getUserProfile);
+router.put("/profile", userprofile_1.updateUserProfile);
+router.post("/profile/picture/upload", userprofile_1.upload.single("file"), userprofile_1.uploadProfilePicture);
+router.post("/profile/picture/get", userprofile_1.getProfilePicture);
+router.delete("/profile/picture/delete", userprofile_1.deleteProfilePicture);
+router.post("/profile/reset/forgotpassword", forgotpass_1.requestForgotPassword);
+router.post("/profile/reset/resetpassword", forgotpass_1.resetPassword);
+router.get("/profile/reset/getresetemailtoken/:id", forgotpass_1.getResetEmailFromToken);
+exports.default = router;
